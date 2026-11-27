@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -216,13 +216,10 @@ const getPlan = (id) => S.planes.find((p) => p.id === id) || null;
 // Línea compartida: una tarjeta que usa el saldo y límite de otra (ej. Diners Sphera → Diners Titanium)
 const lineaPrincipal = (c) => { if (!c || c.tipo !== 'credito' || !c.lineaDe || c.lineaDe === c.id) return null; const p = getCuenta(c.lineaDe); return p && p.tipo === 'credito' && !p.lineaDe ? p : null; };
 const compartenCon = (c) => S.cuentas.filter((x) => x.activa && x.id !== c.id && lineaPrincipal(x)?.id === c.id);
-const tarjetas = () => S.cuentas.filter((c) => c.activa && c.tipo === 'credito' && !lineaPrincipal(c));
-const resolveCuenta = (id) => {
-  let c = getCuenta(id);
-  if (!c) return null;
-  if (c.tipo === 'billetera') c = c.asociadaA ? getCuenta(c.asociadaA) : null;
-  return lineaPrincipal(c) || c;
-};
+// Cada tarjeta tiene su propia deuda; si comparte línea, solo usa el límite de la principal.
+const miembrosLinea = (c) => { const p = lineaPrincipal(c) || c; return [p, ...compartenCon(p)]; };
+const tarjetas = () => S.cuentas.filter((c) => c.activa && c.tipo === 'credito');
+const resolveCuenta = (id) => { const c = getCuenta(id); if (!c) return null; if (c.tipo === 'billetera') return c.asociadaA ? getCuenta(c.asociadaA) : null; return c; };
 const nombreCuenta = (id) => { const c = getCuenta(id); return c ? c.nombre : null; };
 
 function montoEn(m, cuenta) {
@@ -259,7 +256,7 @@ function efectoEn(m, c) {
   return rel ? d : undefined;
 }
 function saldoActual(c) {
-  if (!c || c.tipo === 'billetera' || lineaPrincipal(c) || c.saldo == null) return null;
+  if (!c || c.tipo === 'billetera' || c.saldo == null) return null;
   let s = c.saldo;
   for (const m of S.movimientos) {
     if (m.empresa || !(m.creado > (c.saldoTs || 0))) continue;
@@ -272,7 +269,7 @@ function saldoActual(c) {
 function patrimonio() {
   const r = { liqPEN: 0, liqUSD: 0, debPEN: 0, debUSD: 0, sinSaldo: 0, conSaldo: 0 };
   for (const c of S.cuentas) {
-    if (!c.activa || c.tipo === 'billetera' || lineaPrincipal(c)) continue;
+    if (!c.activa || c.tipo === 'billetera') continue;
     const s = saldoActual(c);
     if (s == null) { r.sinSaldo++; continue; }
     r.conSaldo++;
@@ -325,9 +322,18 @@ function pagosEntre(c, a, b) {
 }
 function estadoTarjeta(c) {
   const deuda = saldoActual(c);
+  // Límite: el propio o el de la línea compartida. El cupo se descuenta con la deuda de todas las tarjetas de la línea.
+  const miembros = miembrosLinea(c);
+  const compartida = miembros.length > 1;
+  const limite = (lineaPrincipal(c) || c).limite;
+  let deudaLinea = 0;
+  for (const m of miembros) { const s = m.id === c.id ? deuda : saldoActual(m); if (s != null) deudaLinea += s; }
+  deudaLinea = round2(deudaLinea);
+  const hayDeuda = miembros.some((m) => saldoActual(m) != null);
   const e = {
-    c, deuda, moneda: c.moneda, cupo: c.limite != null && deuda != null ? round2(c.limite - deuda) : null,
-    uso: c.limite ? Math.max(0, deuda || 0) / c.limite : null, cy: ciclo(c), proximoPago: null, aPagar: null,
+    c, deuda, moneda: c.moneda, limite, compartida, miembros, deudaLinea,
+    cupo: limite != null && hayDeuda ? round2(limite - deudaLinea) : null,
+    uso: limite ? Math.max(0, deudaLinea) / limite : null, cy: ciclo(c), proximoPago: null, aPagar: null,
     fuente: '', minimo: c.minimo, cicloActual: null, pagado: 0, estimado: false,
   };
   const cy = e.cy;
@@ -440,8 +446,10 @@ function consejos() {
       const d = diasEntre(t, e.proximoPago);
       if (d >= 0 && d <= 5) out.push({ tono: 'alerta', icono: '⏰', texto: `Pago de ${c.nombre} ${enDias(e.proximoPago)} (${fCorta(e.proximoPago)}): aprox. ${money(e.aPagar, c.moneda)}. Deja el dinero listo en tu cuenta antes de esa fecha.` });
     }
-    if (e.uso != null && e.uso >= 0.7) out.push({ tono: 'alerta', icono: '💳', texto: `${c.nombre} está al ${pct(e.uso)} de su límite. Usar más del 30% del límite puede afectar tu historial crediticio.` });
-    else if (e.uso != null && e.uso >= 0.3) out.push({ tono: 'info', icono: '💳', texto: `${c.nombre} está al ${pct(e.uso)} de su límite. Lo ideal es mantenerla por debajo del 30%.` });
+    if (lineaPrincipal(c)) continue; // el uso de una línea compartida se avisa una sola vez
+    const quien = e.compartida ? `La línea de ${e.miembros.map((m) => m.nombre).join(' + ')}` : c.nombre;
+    if (e.uso != null && e.uso >= 0.7) out.push({ tono: 'alerta', icono: '💳', texto: `${quien} está al ${pct(e.uso)} de su límite. Usar más del 30% del límite puede afectar tu historial crediticio.` });
+    else if (e.uso != null && e.uso >= 0.3) out.push({ tono: 'info', icono: '💳', texto: `${quien} está al ${pct(e.uso)} de su límite. Lo ideal es mantenerla por debajo del 30%.` });
   }
   if (p.conSaldo && p.neto < 0) out.push({ tono: 'alerta', icono: '⚖️', texto: `Tus deudas superan tu dinero disponible por ${money(-p.neto)}. Prioriza pagar primero la tarjeta con mayor interés.` });
   if (r.hormiga.total > 0 && r.total > 0) {
@@ -726,12 +734,12 @@ function tarjetaHTML(e) {
   if (!e.cy) foot.push('<span class="muted">Agrega día de corte y de pago para ver tus fechas</span>');
   return `<button class="tcard" data-action="edit-cuenta" data-id="${c.id}">
     <div class="tcard-head"><span class="tcard-name">${esc(c.nombre)}${c.ultimos4 ? `<small>•••• ${esc(c.ultimos4)}</small>` : ''}</span><span class="badge badge-gray">${c.moneda}${c.compraPEN ? ' · compras en S/' : ''}</span></div>
-    ${compartenCon(c).length ? `<div class="usage-lbl">Línea compartida con ${compartenCon(c).map((x) => esc(x.nombre)).join(', ')}: una sola deuda y un solo límite</div>` : ''}
+    ${e.compartida ? `<div class="usage-lbl">Comparte límite con ${e.miembros.filter((m) => m.id !== c.id).map((x) => esc(x.nombre)).join(', ')} · deuda propia</div>` : ''}
     <div class="tcard-grid">
       <div><span>Deuda total</span><strong>${money(e.deuda, c.moneda)}</strong></div>
       <div><span>Cupo disponible</span><strong>${e.cupo == null ? '—' : money(e.cupo, c.moneda)}</strong></div>
     </div>
-    ${e.uso != null ? `<div class="usage"><i class="${nivel}" style="width:${Math.min(100, e.uso * 100).toFixed(1)}%"></i></div><div class="usage-lbl">Usas ${pct(e.uso)} de ${money0(c.limite, c.moneda)}</div>` : ''}
+    ${e.uso != null ? `<div class="usage"><i class="${nivel}" style="width:${Math.min(100, e.uso * 100).toFixed(1)}%"></i></div><div class="usage-lbl">${e.compartida ? `Entre ambas usan ${pct(e.uso)} del límite compartido de ${money0(e.limite, c.moneda)} (deuda conjunta ${money(e.deudaLinea, c.moneda)})` : `Usas ${pct(e.uso)} de ${money0(e.limite, c.moneda)}`}</div>` : ''}
     <div class="tcard-foot">${foot.join('')}</div>
   </button>`;
 }
@@ -1000,10 +1008,10 @@ function vAjustes() {
     const s = saldoActual(c);
     const ico = c.tipo === 'credito' ? ICON.card : c.tipo === 'billetera' ? ICON.phone : c.tipo === 'efectivo' ? ICON.cash : ICON.bank;
     let sub = TIPOS_CUENTA[c.tipo] + ` · ${c.moneda}`;
-    if (lineaPrincipal(c)) sub = `Comparte saldo y límite con ${esc(lineaPrincipal(c).nombre)}`;
-    else if (compartenCon(c).length) sub += ` · línea compartida con ${compartenCon(c).map((x) => esc(x.nombre)).join(', ')}`;
+    if (lineaPrincipal(c)) sub += ` · límite compartido con ${esc(lineaPrincipal(c).nombre)}`;
+    else if (compartenCon(c).length) sub += ` · límite compartido con ${compartenCon(c).map((x) => esc(x.nombre)).join(', ')}`;
     if (c.tipo === 'billetera') sub = c.asociadaA ? `Sale de ${esc(nombreCuenta(c.asociadaA))}` : `Asociada a ${esc(c.asociadaTexto || '—')} · sin vincular`;
-    const end = c.tipo === 'billetera' || lineaPrincipal(c) ? '' : s == null ? '<span class="muted">Sin saldo</span>' : `${money(s, c.moneda)}<small>${c.tipo === 'credito' ? 'deuda' : 'saldo'}</small>`;
+    const end = c.tipo === 'billetera' ? '' : s == null ? '<span class="muted">Sin saldo</span>' : `${money(s, c.moneda)}<small>${c.tipo === 'credito' ? 'deuda' : 'saldo'}</small>`;
     return `<button class="set-row" data-action="edit-cuenta" data-id="${c.id}"><div class="ico">${ico}</div><div class="row-main"><div class="row-title">${esc(c.nombre)}${c.ultimos4 ? ` <span class="muted">•••• ${esc(c.ultimos4)}</span>` : ''}${c.activa ? '' : ' <span class="badge badge-gray">oculta</span>'}</div><div class="row-sub">${sub}</div></div><div class="row-end">${end}</div><span class="chev">${ICON.chevron}</span></button>`;
   };
   const instalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
@@ -1190,7 +1198,7 @@ function sheetCuenta(c) {
   const nueva = !c;
   c = c || cuentaBase({ id: '', nombre: '', tipo: 'debito', moneda: 'PEN', custom: true });
   const actual = saldoActual(c);
-  const e = c.tipo === 'credito' && !lineaPrincipal(c) ? estadoTarjeta(c) : null;
+  const e = c.tipo === 'credito' ? estadoTarjeta(c) : null;
   const hijas = nueva ? [] : compartenCon(c);
   const principales = S.cuentas.filter((x) => x.tipo === 'credito' && x.id !== c.id && !x.lineaDe);
   const ecVig = e && c.ec && e.proximoPago && c.ec.pagoFecha === iso(e.proximoPago);
@@ -1204,14 +1212,14 @@ function sheetCuenta(c) {
       <label class="field"><span>Moneda</span><select name="moneda"><option value="PEN" ${c.moneda === 'PEN' ? 'selected' : ''}>Soles (PEN)</option><option value="USD" ${c.moneda === 'USD' ? 'selected' : ''}>Dólares (USD)</option></select></label>
     </div>
     <div data-tipo="credito">${hijas.length
-      ? `<div class="banner"><div class="b-ico">${ICON.card}</div><div><b>Línea compartida</b>${hijas.map((x) => esc(x.nombre)).join(', ')} usa el saldo y el límite de esta tarjeta. Aquí manejas la deuda de ambas.</div></div>`
-      : `<label class="field"><span>Saldo y límite</span><select name="lineaDe"><option value="">Propios de esta tarjeta</option>${principales.map((x) => `<option value="${x.id}" ${c.lineaDe === x.id ? 'selected' : ''}>Comparte con ${esc(x.nombre)}</option>`).join('')}</select>
-        <small>Si dos tarjetas usan la misma línea de crédito (como tus Diners), elige con cuál comparte. Así la deuda y el límite se cuentan una sola vez.</small></label>`}</div>
-    <div data-tipo="credito,debito,efectivo" data-propia><label class="field"><span data-lbl-saldo>${c.tipo === 'credito' ? 'Deuda total actual' : 'Saldo actual'}</span><input name="saldo" inputmode="decimal" placeholder="Sin cargar" value="${actual ?? ''}">
+      ? `<div class="banner"><div class="b-ico">${ICON.card}</div><div><b>Límite compartido</b>${hijas.map((x) => esc(x.nombre)).join(', ')} usa el límite de esta tarjeta. Cada una tiene su propia deuda y estado de cuenta; el cupo disponible se calcula con la deuda de ambas.</div></div>`
+      : `<label class="field"><span>Límite de crédito</span><select name="lineaDe"><option value="">Propio de esta tarjeta</option>${principales.map((x) => `<option value="${x.id}" ${c.lineaDe === x.id ? 'selected' : ''}>Comparte límite con ${esc(x.nombre)}</option>`).join('')}</select>
+        <small>Si dos tarjetas comparten la línea de crédito (como tus Diners), elige con cuál. Cada una sigue con su propia deuda; solo el límite es común.</small></label>`}</div>
+    <div data-tipo="credito,debito,efectivo"><label class="field"><span data-lbl-saldo>${c.tipo === 'credito' ? 'Deuda total actual' : 'Saldo actual'}</span><input name="saldo" inputmode="decimal" placeholder="Sin cargar" value="${actual ?? ''}">
       <small>Lo que escribas queda como punto de partida. Lo que registres después se suma o resta solo.</small></label></div>
-    <div data-tipo="credito" class="form" data-propia>
+    <div data-tipo="credito" class="form">
       <div class="grid2">
-        <label class="field"><span>Límite</span><input name="limite" inputmode="decimal" value="${c.limite ?? ''}"></label>
+        <label class="field" data-limite-propio><span>Límite</span><input name="limite" inputmode="decimal" value="${c.limite ?? ''}"></label>
         <label class="field"><span>Pago mínimo habitual</span><input name="minimo" inputmode="decimal" value="${c.minimo ?? ''}"></label>
         <label class="field"><span>Día de corte</span><input name="diaCorte" inputmode="numeric" placeholder="1–31" value="${c.diaCorte ?? ''}"></label>
         <label class="field"><span>Día de pago</span><input name="diaPago" inputmode="numeric" placeholder="1–31" value="${c.diaPago ?? ''}"></label>
@@ -1240,7 +1248,8 @@ function sheetCuenta(c) {
     const sync = () => {
       const t = f.elements.tipo.value;
       const hija = t === 'credito' && f.elements.lineaDe && f.elements.lineaDe.value;
-      $$('[data-tipo]', f).forEach((el) => { el.hidden = !el.dataset.tipo.split(',').includes(t) || (hija && 'propia' in el.dataset); });
+      $$('[data-tipo]', f).forEach((el) => { el.hidden = !el.dataset.tipo.split(',').includes(t); });
+      $('[data-limite-propio]', f).hidden = !!hija;
       $('[data-lbl-saldo]', f).textContent = t === 'credito' ? 'Deuda total actual' : 'Saldo actual';
     };
     sync();
@@ -1262,15 +1271,14 @@ function guardarCuenta(f) {
   const dia = (v) => { const n = parseInt(v, 10); return n >= 1 && n <= 31 ? n : null; };
   c.lineaDe = c.tipo === 'credito' && E.lineaDe && E.lineaDe.value && E.lineaDe.value !== c.id ? E.lineaDe.value : null;
   const hija = !!c.lineaDe;
-  if (c.tipo === 'credito' && !hija) {
-    c.limite = num(E.limite.value);
+  if (c.tipo === 'credito') {
+    if (!hija) c.limite = num(E.limite.value);
     c.minimo = num(E.minimo.value);
     c.diaCorte = dia(E.diaCorte.value);
     c.diaPago = dia(E.diaPago.value);
     c.compraPEN = E.compraPEN.checked;
   }
   if (c.tipo === 'billetera') { c.asociadaA = E.asociadaA.value || null; c.asociadaTexto = E.asociadaTexto.value.trim(); c.saldo = null; c.saldoTs = null; }
-  else if (hija) { c.compraPEN = E.compraPEN.checked; }
   else {
     const s = num(E.saldo.value);
     if (s == null) { c.saldo = null; c.saldoTs = null; }
@@ -1281,7 +1289,7 @@ function guardarCuenta(f) {
   c.ultimos4 = u4;
   c.nota = E.nota.value.trim();
   c.activa = E.activa.checked;
-  if (c.tipo === 'credito' && !hija) {
+  if (c.tipo === 'credito') {
     const ecM = num(E.ecMonto.value);
     if (ecM != null) {
       c.ec = null;
