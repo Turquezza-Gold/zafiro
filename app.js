@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -97,7 +97,7 @@ const CUENTAS_BASE = [
   { id: 'cmr', nombre: 'CMR Falabella', tipo: 'credito', moneda: 'PEN' },
   { id: 'ripley', nombre: 'Ripley Silver', tipo: 'credito', moneda: 'PEN' },
   { id: 'diners-titanium', nombre: 'Diners Titanium Signature', tipo: 'credito', moneda: 'USD', compraPEN: true },
-  { id: 'diners-sphera', nombre: 'Diners Sphera', tipo: 'credito', moneda: 'USD', compraPEN: true },
+  { id: 'diners-sphera', nombre: 'Diners Sphera', tipo: 'credito', moneda: 'USD', compraPEN: true, lineaDe: 'diners-titanium' },
   { id: 'pichincha', nombre: 'Tarjeta Joven Pichincha', tipo: 'credito', moneda: 'USD' },
   { id: 'pacificard', nombre: 'Pacificard', tipo: 'credito', moneda: 'USD' },
   { id: 'efectivo', nombre: 'Efectivo', tipo: 'efectivo', moneda: 'PEN' },
@@ -146,7 +146,7 @@ const ICONOS_PLAN = ['🏠', '✈️', '🚗', '🛡️', '🎓', '💍', '💻'
 function cuentaBase(c) {
   return Object.assign({
     saldo: null, saldoTs: null, limite: null, diaCorte: null, diaPago: null, minimo: null, ec: null,
-    ultimos4: '', asociadaA: null, asociadaTexto: '', nota: '', compraPEN: false, activa: true, custom: false,
+    ultimos4: '', asociadaA: null, asociadaTexto: '', nota: '', compraPEN: false, activa: true, custom: false, lineaDe: null,
   }, c);
 }
 function planBase(p) {
@@ -174,6 +174,7 @@ function normalizar(raw) {
     s.cuentas = raw.cuentas.filter((c) => c && c.id && c.nombre).map((c) => {
       const x = cuentaBase({ ...c });
       x.ultimos4 = String(x.ultimos4 || '').replace(/\D/g, '').slice(-4); // nunca más de 4 dígitos
+      if (x.id === 'diners-sphera' && !('lineaDe' in c)) x.lineaDe = 'diners-titanium'; // Diners comparten línea
       delete x.numero;
       return x;
     });
@@ -212,8 +213,16 @@ function save() {
 const getCuenta = (id) => S.cuentas.find((c) => c.id === id) || null;
 const getCat = (id) => S.categorias.find((c) => c.id === id) || null;
 const getPlan = (id) => S.planes.find((p) => p.id === id) || null;
-const tarjetas = () => S.cuentas.filter((c) => c.activa && c.tipo === 'credito');
-const resolveCuenta = (id) => { const c = getCuenta(id); if (!c) return null; if (c.tipo === 'billetera') return c.asociadaA ? getCuenta(c.asociadaA) : null; return c; };
+// Línea compartida: una tarjeta que usa el saldo y límite de otra (ej. Diners Sphera → Diners Titanium)
+const lineaPrincipal = (c) => { if (!c || c.tipo !== 'credito' || !c.lineaDe || c.lineaDe === c.id) return null; const p = getCuenta(c.lineaDe); return p && p.tipo === 'credito' && !p.lineaDe ? p : null; };
+const compartenCon = (c) => S.cuentas.filter((x) => x.activa && x.id !== c.id && lineaPrincipal(x)?.id === c.id);
+const tarjetas = () => S.cuentas.filter((c) => c.activa && c.tipo === 'credito' && !lineaPrincipal(c));
+const resolveCuenta = (id) => {
+  let c = getCuenta(id);
+  if (!c) return null;
+  if (c.tipo === 'billetera') c = c.asociadaA ? getCuenta(c.asociadaA) : null;
+  return lineaPrincipal(c) || c;
+};
 const nombreCuenta = (id) => { const c = getCuenta(id); return c ? c.nombre : null; };
 
 function montoEn(m, cuenta) {
@@ -250,7 +259,7 @@ function efectoEn(m, c) {
   return rel ? d : undefined;
 }
 function saldoActual(c) {
-  if (!c || c.tipo === 'billetera' || c.saldo == null) return null;
+  if (!c || c.tipo === 'billetera' || lineaPrincipal(c) || c.saldo == null) return null;
   let s = c.saldo;
   for (const m of S.movimientos) {
     if (m.empresa || !(m.creado > (c.saldoTs || 0))) continue;
@@ -263,7 +272,7 @@ function saldoActual(c) {
 function patrimonio() {
   const r = { liqPEN: 0, liqUSD: 0, debPEN: 0, debUSD: 0, sinSaldo: 0, conSaldo: 0 };
   for (const c of S.cuentas) {
-    if (!c.activa || c.tipo === 'billetera') continue;
+    if (!c.activa || c.tipo === 'billetera' || lineaPrincipal(c)) continue;
     const s = saldoActual(c);
     if (s == null) { r.sinSaldo++; continue; }
     r.conSaldo++;
@@ -717,6 +726,7 @@ function tarjetaHTML(e) {
   if (!e.cy) foot.push('<span class="muted">Agrega día de corte y de pago para ver tus fechas</span>');
   return `<button class="tcard" data-action="edit-cuenta" data-id="${c.id}">
     <div class="tcard-head"><span class="tcard-name">${esc(c.nombre)}${c.ultimos4 ? `<small>•••• ${esc(c.ultimos4)}</small>` : ''}</span><span class="badge badge-gray">${c.moneda}${c.compraPEN ? ' · compras en S/' : ''}</span></div>
+    ${compartenCon(c).length ? `<div class="usage-lbl">Línea compartida con ${compartenCon(c).map((x) => esc(x.nombre)).join(', ')}: una sola deuda y un solo límite</div>` : ''}
     <div class="tcard-grid">
       <div><span>Deuda total</span><strong>${money(e.deuda, c.moneda)}</strong></div>
       <div><span>Cupo disponible</span><strong>${e.cupo == null ? '—' : money(e.cupo, c.moneda)}</strong></div>
@@ -990,8 +1000,10 @@ function vAjustes() {
     const s = saldoActual(c);
     const ico = c.tipo === 'credito' ? ICON.card : c.tipo === 'billetera' ? ICON.phone : c.tipo === 'efectivo' ? ICON.cash : ICON.bank;
     let sub = TIPOS_CUENTA[c.tipo] + ` · ${c.moneda}`;
+    if (lineaPrincipal(c)) sub = `Comparte saldo y límite con ${esc(lineaPrincipal(c).nombre)}`;
+    else if (compartenCon(c).length) sub += ` · línea compartida con ${compartenCon(c).map((x) => esc(x.nombre)).join(', ')}`;
     if (c.tipo === 'billetera') sub = c.asociadaA ? `Sale de ${esc(nombreCuenta(c.asociadaA))}` : `Asociada a ${esc(c.asociadaTexto || '—')} · sin vincular`;
-    const end = c.tipo === 'billetera' ? '' : s == null ? '<span class="muted">Sin saldo</span>' : `${money(s, c.moneda)}<small>${c.tipo === 'credito' ? 'deuda' : 'saldo'}</small>`;
+    const end = c.tipo === 'billetera' || lineaPrincipal(c) ? '' : s == null ? '<span class="muted">Sin saldo</span>' : `${money(s, c.moneda)}<small>${c.tipo === 'credito' ? 'deuda' : 'saldo'}</small>`;
     return `<button class="set-row" data-action="edit-cuenta" data-id="${c.id}"><div class="ico">${ico}</div><div class="row-main"><div class="row-title">${esc(c.nombre)}${c.ultimos4 ? ` <span class="muted">•••• ${esc(c.ultimos4)}</span>` : ''}${c.activa ? '' : ' <span class="badge badge-gray">oculta</span>'}</div><div class="row-sub">${sub}</div></div><div class="row-end">${end}</div><span class="chev">${ICON.chevron}</span></button>`;
   };
   const instalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
@@ -1113,7 +1125,7 @@ function syncMovForm(f) {
   $$('[data-action="mov-moneda"]', f).forEach((b) => b.classList.toggle('on', b.dataset.v === moneda));
   $('#monto-cur', f).textContent = sym(moneda);
   const selCu = f.elements.cuentaId.value;
-  const objetivo = tipo === 'pago' ? getCuenta(f.elements.destinoId.value) : resolveCuenta(selCu);
+  const objetivo = tipo === 'pago' ? resolveCuenta(f.elements.destinoId.value) : resolveCuenta(selCu);
   const cargo = tipo !== 'ingreso' && objetivo && objetivo.tipo === 'credito' && objetivo.moneda === 'USD' && moneda === 'PEN';
   const show = { cargo, destino: tipo === 'pago', categoria: tipo === 'gasto', empresa: tipo === 'gasto' };
   $$('[data-show]', f).forEach((el) => { el.hidden = !show[el.dataset.show]; });
@@ -1178,7 +1190,9 @@ function sheetCuenta(c) {
   const nueva = !c;
   c = c || cuentaBase({ id: '', nombre: '', tipo: 'debito', moneda: 'PEN', custom: true });
   const actual = saldoActual(c);
-  const e = c.tipo === 'credito' ? estadoTarjeta(c) : null;
+  const e = c.tipo === 'credito' && !lineaPrincipal(c) ? estadoTarjeta(c) : null;
+  const hijas = nueva ? [] : compartenCon(c);
+  const principales = S.cuentas.filter((x) => x.tipo === 'credito' && x.id !== c.id && !x.lineaDe);
   const ecVig = e && c.ec && e.proximoPago && c.ec.pagoFecha === iso(e.proximoPago);
   const vinculables = S.cuentas.filter((x) => x.tipo !== 'billetera' && x.id !== c.id);
   const html = `<form data-form="cuenta" class="form" autocomplete="off" novalidate>
@@ -1189,9 +1203,13 @@ function sheetCuenta(c) {
       <label class="field"><span>Tipo</span><select name="tipo">${Object.entries(TIPOS_CUENTA).map(([k, l]) => `<option value="${k}" ${c.tipo === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field"><span>Moneda</span><select name="moneda"><option value="PEN" ${c.moneda === 'PEN' ? 'selected' : ''}>Soles (PEN)</option><option value="USD" ${c.moneda === 'USD' ? 'selected' : ''}>Dólares (USD)</option></select></label>
     </div>
-    <div data-tipo="credito,debito,efectivo"><label class="field"><span data-lbl-saldo>${c.tipo === 'credito' ? 'Deuda total actual' : 'Saldo actual'}</span><input name="saldo" inputmode="decimal" placeholder="Sin cargar" value="${actual ?? ''}">
+    <div data-tipo="credito">${hijas.length
+      ? `<div class="banner"><div class="b-ico">${ICON.card}</div><div><b>Línea compartida</b>${hijas.map((x) => esc(x.nombre)).join(', ')} usa el saldo y el límite de esta tarjeta. Aquí manejas la deuda de ambas.</div></div>`
+      : `<label class="field"><span>Saldo y límite</span><select name="lineaDe"><option value="">Propios de esta tarjeta</option>${principales.map((x) => `<option value="${x.id}" ${c.lineaDe === x.id ? 'selected' : ''}>Comparte con ${esc(x.nombre)}</option>`).join('')}</select>
+        <small>Si dos tarjetas usan la misma línea de crédito (como tus Diners), elige con cuál comparte. Así la deuda y el límite se cuentan una sola vez.</small></label>`}</div>
+    <div data-tipo="credito,debito,efectivo" data-propia><label class="field"><span data-lbl-saldo>${c.tipo === 'credito' ? 'Deuda total actual' : 'Saldo actual'}</span><input name="saldo" inputmode="decimal" placeholder="Sin cargar" value="${actual ?? ''}">
       <small>Lo que escribas queda como punto de partida. Lo que registres después se suma o resta solo.</small></label></div>
-    <div data-tipo="credito" class="form">
+    <div data-tipo="credito" class="form" data-propia>
       <div class="grid2">
         <label class="field"><span>Límite</span><input name="limite" inputmode="decimal" value="${c.limite ?? ''}"></label>
         <label class="field"><span>Pago mínimo habitual</span><input name="minimo" inputmode="decimal" value="${c.minimo ?? ''}"></label>
@@ -1221,7 +1239,8 @@ function sheetCuenta(c) {
     const f = $('form', root);
     const sync = () => {
       const t = f.elements.tipo.value;
-      $$('[data-tipo]', f).forEach((el) => { el.hidden = !el.dataset.tipo.split(',').includes(t); });
+      const hija = t === 'credito' && f.elements.lineaDe && f.elements.lineaDe.value;
+      $$('[data-tipo]', f).forEach((el) => { el.hidden = !el.dataset.tipo.split(',').includes(t) || (hija && 'propia' in el.dataset); });
       $('[data-lbl-saldo]', f).textContent = t === 'credito' ? 'Deuda total actual' : 'Saldo actual';
     };
     sync();
@@ -1241,7 +1260,9 @@ function guardarCuenta(f) {
   c.tipo = E.tipo.value;
   c.moneda = E.moneda.value === 'USD' ? 'USD' : 'PEN';
   const dia = (v) => { const n = parseInt(v, 10); return n >= 1 && n <= 31 ? n : null; };
-  if (c.tipo === 'credito') {
+  c.lineaDe = c.tipo === 'credito' && E.lineaDe && E.lineaDe.value && E.lineaDe.value !== c.id ? E.lineaDe.value : null;
+  const hija = !!c.lineaDe;
+  if (c.tipo === 'credito' && !hija) {
     c.limite = num(E.limite.value);
     c.minimo = num(E.minimo.value);
     c.diaCorte = dia(E.diaCorte.value);
@@ -1249,6 +1270,7 @@ function guardarCuenta(f) {
     c.compraPEN = E.compraPEN.checked;
   }
   if (c.tipo === 'billetera') { c.asociadaA = E.asociadaA.value || null; c.asociadaTexto = E.asociadaTexto.value.trim(); c.saldo = null; c.saldoTs = null; }
+  else if (hija) { c.compraPEN = E.compraPEN.checked; }
   else {
     const s = num(E.saldo.value);
     if (s == null) { c.saldo = null; c.saldoTs = null; }
@@ -1259,7 +1281,7 @@ function guardarCuenta(f) {
   c.ultimos4 = u4;
   c.nota = E.nota.value.trim();
   c.activa = E.activa.checked;
-  if (c.tipo === 'credito') {
+  if (c.tipo === 'credito' && !hija) {
     const ecM = num(E.ecMonto.value);
     if (ecM != null) {
       c.ec = null;

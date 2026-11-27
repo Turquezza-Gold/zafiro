@@ -7,7 +7,7 @@
     "bbva-platinum": { "saldo": 1240.3, "limite": 9000, "diaCorte": 20, "diaPago": 15, "ultimos4": "0000" },
     "cmr": { "saldo": 480, "limite": 4000, "diaCorte": 5, "diaPago": 28 },
     "ripley": { "saldo": 0, "limite": 2500, "diaCorte": 12, "diaPago": 5 },
-    "diners-sphera": { "saldo": 185.4, "limite": 3000, "diaCorte": 25, "diaPago": 19 },
+    "diners-titanium": { "saldo": 185.4, "limite": 3000, "diaCorte": 25, "diaPago": 19 },
     "pacificard": { "saldo": 60, "limite": 1200, "diaCorte": 10, "diaPago": 5 }
   },
   "ajustes": { "tc": 3.8, "ahorroMensual": 800, "presupuesto": 2500, "proyMeses": 12 },
