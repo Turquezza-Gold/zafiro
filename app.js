@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.0';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -188,7 +188,7 @@ function normalizar(raw) {
       moneda: m.moneda === 'USD' ? 'USD' : 'PEN', montoCargo: typeof m.montoCargo === 'number' ? m.montoCargo : null,
       descripcion: String(m.descripcion || ''), cuentaId: m.cuentaId || null, destinoId: m.destinoId || null,
       categoriaId: m.categoriaId || null, fecha: String(m.fecha).slice(0, 10), empresa: !!m.empresa,
-      nota: String(m.nota || ''), creado: Number(m.creado) || Date.now(), demo: !!m.demo,
+      nota: String(m.nota || ''), creado: Number(m.creado) || Date.now(), demo: !!m.demo, yaEnSaldo: !!m.yaEnSaldo,
     }));
   }
   if (Array.isArray(raw.planes)) s.planes = raw.planes.map((p) => planBase({ ...p }));
@@ -259,7 +259,7 @@ function saldoActual(c) {
   if (!c || c.tipo === 'billetera' || c.saldo == null) return null;
   let s = c.saldo;
   for (const m of S.movimientos) {
-    if (m.empresa || !(m.creado > (c.saldoTs || 0))) continue;
+    if (m.empresa || m.yaEnSaldo || !(m.creado > (c.saldoTs || 0))) continue;
     const e = efectoEn(m, c);
     if (e == null) continue;
     s += e;
@@ -743,11 +743,46 @@ function tarjetaHTML(e) {
     <div class="tcard-foot">${foot.join('')}</div>
   </button>`;
 }
+// Línea compartida (ej. Diners): un solo bloque con el cupo común y la deuda de cada tarjeta
+function lineaHTML(p) {
+  const miembros = miembrosLinea(p).filter((m) => m.activa);
+  const e0 = estadoTarjeta(p);
+  const cur = p.moneda;
+  const nivel = e0.uso >= 0.7 ? 'critico' : e0.uso >= 0.3 ? 'alto' : '';
+  const filas = miembros.map((m) => {
+    const e = estadoTarjeta(m);
+    const det = [];
+    if (e.proximoPago) det.push(`Pago ${fCorta(e.proximoPago)} (${enDias(e.proximoPago)})`);
+    if (e.aPagar != null) det.push(`a pagar ${e.estimado ? 'aprox. ' : ''}<b>${money(e.aPagar, cur)}</b>`);
+    if (e.minimo) det.push(`mín. ${money(e.minimo, cur)}`);
+    if (!e.cy) det.push('falta día de corte y pago');
+    return `<button class="linea-item" data-action="edit-cuenta" data-id="${m.id}">
+      <div class="li-top"><span class="li-name">${esc(m.nombre)}${m.ultimos4 ? ` <small>•••• ${esc(m.ultimos4)}</small>` : ''}</span><span class="li-deuda">${e.deuda == null ? '<span class="muted">sin deuda cargada</span>' : money(e.deuda, cur)}</span></div>
+      <div class="li-sub">${det.join(' · ')}</div></button>`;
+  }).join('');
+  return `<div class="tcard tcard-linea">
+    <div class="tcard-head"><span class="eyebrow">Línea compartida</span><span class="badge badge-gray">${cur}${p.compraPEN ? ' · compras en S/' : ''}</span></div>
+    <div class="tcard-name" style="margin-top:4px">${miembros.map((m) => esc(m.nombre)).join(' + ')}</div>
+    <div class="tcard-grid">
+      <div><span>Cupo disponible (ambas)</span><strong>${e0.cupo == null ? '—' : money(e0.cupo, cur)}</strong></div>
+      <div><span>Deuda de ambas</span><strong>${money(e0.deudaLinea, cur)}</strong></div>
+    </div>
+    ${e0.uso != null ? `<div class="usage"><i class="${nivel}" style="width:${Math.min(100, e0.uso * 100).toFixed(1)}%"></i></div><div class="usage-lbl">Usan ${pct(e0.uso)} del límite de ${money0(e0.limite, cur)}</div>` : `<div class="usage-lbl">Toca ${esc(p.nombre)} para poner el cupo disponible o el límite</div>`}
+    <div class="linea-list">${filas}</div>
+  </div>`;
+}
 function tarjetasHTML() {
   const all = tarjetas();
-  const con = all.filter((c) => c.saldo != null || c.limite != null);
-  const sin = all.filter((c) => c.saldo == null && c.limite == null);
-  const body = `<div class="tcards">${con.map((c) => tarjetaHTML(estadoTarjeta(c))).join('')}</div>
+  const tieneDatos = (c) => miembrosLinea(c).some((m) => m.saldo != null || m.limite != null);
+  const con = all.filter(tieneDatos);
+  const sin = all.filter((c) => !tieneDatos(c));
+  const vistos = new Set();
+  const bloques = con.map((c) => {
+    const p = lineaPrincipal(c) || c;
+    if (miembrosLinea(p).length > 1) { if (vistos.has(p.id)) return ''; vistos.add(p.id); return lineaHTML(p); }
+    return tarjetaHTML(estadoTarjeta(c));
+  }).join('');
+  const body = `<div class="tcards">${bloques}</div>
     ${sin.length ? `<div class="card-note">Sin datos: ${sin.map((c) => `<button class="link-btn" data-action="edit-cuenta" data-id="${c.id}">${esc(c.nombre)}</button>`).join(' · ')}</div>` : ''}`;
   return sec('Tarjetas', body, `<span class="badge badge-gray">${all.length}</span>`);
 }
@@ -851,6 +886,7 @@ function movItemHTML(m) {
   else sub = `${cu ? esc(cu.nombre) : 'Origen por confirmar'} → ${esc(nombreCuenta(m.destinoId) || 'tarjeta')}`;
   if (m.empresa) tags.push('<span class="badge">Empresa</span>');
   if (m.montoCargo != null) tags.push(`<span class="badge badge-gray">Cargo ${money(m.montoCargo, 'USD')}</span>`);
+  if (m.yaEnSaldo) tags.push('<span class="badge badge-gray">Ya en saldo</span>');
   if (m.demo) tags.push('<span class="badge badge-gray">Ejemplo</span>');
   const ico = m.tipo === 'ingreso' ? ICON.arrowIn : m.tipo === 'pago' ? ICON.swap : cu?.tipo === 'credito' ? ICON.card : cu?.tipo === 'billetera' ? ICON.phone : cu?.tipo === 'efectivo' ? ICON.cash : ICON.tag;
   const sign = m.tipo === 'ingreso' ? '+' : m.tipo === 'gasto' ? '−' : '';
@@ -1019,7 +1055,7 @@ function vAjustes() {
     ${instalada ? '' : `<div class="banner"><div class="b-ico">${ICON.phone}</div><div><b>Instálala en tu iPhone</b>En Safari toca Compartir → «Agregar a inicio». Así abre a pantalla completa, sin internet, y tus datos quedan protegidos.</div></div>`}
     ${sec(`${ICON.shield} Respaldo`, `<div class="facts" style="margin-top:0"><span>Último respaldo: <b>${d == null ? 'nunca' : d === 0 ? 'hoy' : `hace ${plural(d, 'día', 'días')}`}</b></span></div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" data-action="exportar">${ICON.down} Exportar</button><button class="btn" data-action="importar">${ICON.upload} Importar</button></div>
-      <div class="card-note">Exportar crea un archivo JSON (para restaurar) y uno CSV (para Excel/Numbers). En el menú elige «Guardar en Archivos» → iCloud Drive.</div>`, '', 'sec-respaldo')}
+      <div class="card-note">Exportar crea un archivo JSON (para restaurar) y uno CSV (para Excel/Numbers): en el menú elige «Guardar en Archivos» → iCloud Drive. Importar sirve para restaurar un respaldo o para agregar movimientos desde un archivo (te muestra la lista antes de agregar).</div>`, '', 'sec-respaldo')}
     ${sec('Cuentas y tarjetas', `<div class="list">${S.cuentas.map(cuentaRow).join('')}</div><button class="btn btn-block" style="margin-top:10px" data-action="nueva-cuenta">+ Agregar cuenta</button>
       <div class="card-note">Solo guardamos el nombre y, si quieres, los últimos 4 dígitos. Nunca el número completo.</div>`, '', 'sec-cuentas')}
     ${sec('Parámetros', `<div class="facts" style="margin-top:0">
@@ -1084,7 +1120,7 @@ function opcionesCategoria(sel) {
 function sheetMov(m, tipoInicial = 'gasto') {
   const edit = !!m;
   m = m || { tipo: tipoInicial, monto: null, moneda: 'PEN', montoCargo: null, descripcion: '', cuentaId: '', destinoId: '', categoriaId: '', fecha: hoyISO(), empresa: false, nota: '' };
-  const html = `<form data-form="mov" class="form" autocomplete="off" novalidate>
+  const html = `<form data-form="mov" class="form" autocomplete="off" novalidate ${edit ? '' : 'data-nuevo="1"'}>
     <input type="hidden" name="id" value="${esc(m.id || '')}">
     <input type="hidden" name="tipo" value="${m.tipo}">
     <input type="hidden" name="moneda" value="${m.moneda}">
@@ -1104,6 +1140,7 @@ function sheetMov(m, tipoInicial = 'gasto') {
     <label class="field" data-show="destino"><span>Tarjeta que pagas</span><select name="destinoId">${opcionesTarjeta(m.destinoId)}</select></label>
     <label class="field" data-show="categoria"><span>Categoría</span><select name="categoriaId">${opcionesCategoria(m.categoriaId)}</select></label>
     <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${m.fecha}"></label>
+    <label class="switch" data-show="ensaldo"><input type="checkbox" name="yaEnSaldo" ${m.yaEnSaldo ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Ya está incluido en el saldo que cargaste</b><small>Es anterior al <span id="ensaldo-fecha"></span>, cuando pusiste el saldo de esta cuenta. Se guarda para tus análisis sin descontarlo otra vez.</small></span></label>
     <label class="switch" data-show="empresa"><input type="checkbox" name="empresa" ${m.empresa ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Pagado por la empresa</b><small>Va a una lista aparte y no entra en tu ahorro.</small></span></label>
     <label class="field"><span>Nota (opcional)</span><input name="nota" value="${esc(m.nota)}"></label>
     <div class="sheet-actions"><button type="submit" class="btn btn-primary btn-xl" id="btn-guardar">Guardar</button>
@@ -1135,7 +1172,15 @@ function syncMovForm(f) {
   const selCu = f.elements.cuentaId.value;
   const objetivo = tipo === 'pago' ? resolveCuenta(f.elements.destinoId.value) : resolveCuenta(selCu);
   const cargo = tipo !== 'ingreso' && objetivo && objetivo.tipo === 'credito' && objetivo.moneda === 'USD' && moneda === 'PEN';
-  const show = { cargo, destino: tipo === 'pago', categoria: tipo === 'gasto', empresa: tipo === 'gasto' };
+  // ¿Es un movimiento anterior al día en que cargaste el saldo de esa cuenta? Entonces ya está dentro del saldo.
+  const fechaSaldo = (c) => (c && c.saldoTs ? iso(new Date(c.saldoTs)) : null);
+  const fechas = [resolveCuenta(selCu), tipo === 'pago' ? resolveCuenta(f.elements.destinoId.value) : null].map(fechaSaldo).filter(Boolean);
+  const fMov = f.elements.fecha.value;
+  const ensaldo = !!fMov && fechas.some((fs) => fMov < fs);
+  const chk = f.elements.yaEnSaldo;
+  if (ensaldo && f.dataset.nuevo && !chk.dataset.touched) chk.checked = true;
+  if (ensaldo) $('#ensaldo-fecha', f).textContent = fCorta(fechas.sort()[0]);
+  const show = { cargo, destino: tipo === 'pago', categoria: tipo === 'gasto', empresa: tipo === 'gasto', ensaldo };
   $$('[data-show]', f).forEach((el) => { el.hidden = !show[el.dataset.show]; });
   $('#lbl-cuenta', f).textContent = tipo === 'gasto' ? 'Pagado con' : tipo === 'ingreso' ? 'Entra a' : 'Pagas desde';
   const cu = getCuenta(selCu);
@@ -1183,6 +1228,7 @@ function guardarMov(f) {
   };
   const mc = num(E.montoCargo.value);
   if (mc && !E.montoCargo.closest('[data-show]').hidden) m.montoCargo = round2(mc);
+  m.yaEnSaldo = !E.yaEnSaldo.closest('[data-show]').hidden && E.yaEnSaldo.checked;
   if (tipo === 'pago' && !m.destinoId) { toast('Elige la tarjeta que pagas'); return; }
   const prev = S.movimientos.find((x) => x.id === m.id);
   if (prev) Object.assign(prev, m);
@@ -1219,11 +1265,12 @@ function sheetCuenta(c) {
       <small>Lo que escribas queda como punto de partida. Lo que registres después se suma o resta solo.</small></label></div>
     <div data-tipo="credito" class="form">
       <div class="grid2">
-        <label class="field" data-limite-propio><span>Límite</span><input name="limite" inputmode="decimal" value="${c.limite ?? ''}"></label>
+        <label class="field" data-limite-propio><span>Límite${hijas.length ? ' (compartido)' : ''}</span><input name="limite" inputmode="decimal" value="${c.limite ?? ''}"></label>
         <label class="field"><span>Pago mínimo habitual</span><input name="minimo" inputmode="decimal" value="${c.minimo ?? ''}"></label>
         <label class="field"><span>Día de corte</span><input name="diaCorte" inputmode="numeric" placeholder="1–31" value="${c.diaCorte ?? ''}"></label>
         <label class="field"><span>Día de pago</span><input name="diaPago" inputmode="numeric" placeholder="1–31" value="${c.diaPago ?? ''}"></label>
       </div>
+      <label class="field" data-limite-propio><span>…o escribe el cupo disponible de hoy${hijas.length ? ' (de ambas tarjetas)' : ''}</span><input name="cupoHoy" inputmode="decimal" placeholder="Lo que te dice el banco"><small>Si no sabes el límite, escribe el cupo que te muestra el banco y yo calculo el límite.${hijas.length ? ` Carga antes la deuda de ${hijas.map((x) => esc(x.nombre)).join(', ')}.` : ''}</small></label>
       <label class="switch"><input type="checkbox" name="compraPEN" ${c.compraPEN ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Compro en soles, me cargan en dólares</b><small>Como en Diners: podrás guardar los dos montos.</small></span></label>
       <div class="form-section">Estado de cuenta ${e && e.proximoPago ? `· pago del ${fCorta(e.proximoPago)}` : ''}</div>
       <div class="grid2">
@@ -1249,7 +1296,7 @@ function sheetCuenta(c) {
       const t = f.elements.tipo.value;
       const hija = t === 'credito' && f.elements.lineaDe && f.elements.lineaDe.value;
       $$('[data-tipo]', f).forEach((el) => { el.hidden = !el.dataset.tipo.split(',').includes(t); });
-      $('[data-limite-propio]', f).hidden = !!hija;
+      $$('[data-limite-propio]', f).forEach((el) => { el.hidden = !!hija; });
       $('[data-lbl-saldo]', f).textContent = t === 'credito' ? 'Deuda total actual' : 'Saldo actual';
     };
     sync();
@@ -1257,6 +1304,7 @@ function sheetCuenta(c) {
     f.addEventListener('input', () => { sheetDirty = true; });
   });
 }
+let avisoCuenta = '';
 function guardarCuenta(f) {
   const E = f.elements;
   const nombre = E.nombre.value.trim();
@@ -1289,6 +1337,15 @@ function guardarCuenta(f) {
   c.ultimos4 = u4;
   c.nota = E.nota.value.trim();
   c.activa = E.activa.checked;
+  if (c.tipo === 'credito' && !hija) {
+    const cupoHoy = num(E.cupoHoy.value);
+    if (cupoHoy != null) {
+      const sinDeuda = [c, ...compartenCon(c)].filter((m) => saldoActual(m) == null);
+      const deudaLinea = [c, ...compartenCon(c)].reduce((t, m) => t + (saldoActual(m) || 0), 0);
+      c.limite = round2(cupoHoy + deudaLinea);
+      if (sinDeuda.length) avisoCuenta = `Guardado. Falta la deuda de ${sinDeuda.map((m) => m.nombre).join(', ')}: escribe el cupo otra vez después`;
+    }
+  }
   if (c.tipo === 'credito') {
     const ecM = num(E.ecMonto.value);
     if (ecM != null) {
@@ -1299,7 +1356,7 @@ function guardarCuenta(f) {
     } else c.ec = null;
   }
   if (nueva) S.cuentas.push(c);
-  save(); closeSheet(true); render(); toast('Cuenta guardada');
+  save(); closeSheet(true); render(); toast(avisoCuenta || 'Cuenta guardada'); avisoCuenta = '';
 }
 
 /* ----- Categoría ----- */
@@ -1427,6 +1484,7 @@ function importarArchivo(file) {
   rd.onload = () => {
     let data;
     try { data = JSON.parse(rd.result); } catch { toast('Ese archivo no es un respaldo válido'); return; }
+    if (data && data.app === 'zafiro-movimientos' && Array.isArray(data.movimientos)) { sheetAgregar(data); return; }
     if (!data || data.app !== 'zafiro' || !Array.isArray(data.cuentas)) { toast('Ese archivo no es un respaldo de Zafiro'); return; }
     const n = Array.isArray(data.movimientos) ? data.movimientos.length : 0;
     if (!confirm(`Restaurar respaldo del ${data.exportado ? fMedia(new Date(data.exportado)) : 'archivo'} con ${n} movimientos.\n\nEsto REEMPLAZA los datos actuales de la app. ¿Continuar?`)) return;
@@ -1434,6 +1492,49 @@ function importarArchivo(file) {
     save(); ui.tab = 'inicio'; render(); toast('Respaldo restaurado ✓');
   };
   rd.readAsText(file);
+}
+
+/* ----- Agregar movimientos desde un archivo (ej. armado desde capturas del banco) ----- */
+let porAgregar = [];
+function sheetAgregar(data) {
+  const cats = (desc) => { const dn = norm(desc); if (!dn) return null; const prev = [...S.movimientos].reverse().find((m) => m.categoriaId && norm(m.descripcion) === dn && getCat(m.categoriaId)); return prev ? prev.categoriaId : null; };
+  porAgregar = data.movimientos.map((x) => {
+    const m = {
+      tipo: ['gasto', 'ingreso', 'pago'].includes(x.tipo) ? x.tipo : 'gasto',
+      monto: round2(num(x.monto) || 0), moneda: x.moneda === 'USD' ? 'USD' : 'PEN',
+      montoCargo: num(x.montoCargo) != null ? round2(num(x.montoCargo)) : null,
+      descripcion: String(x.descripcion || '').trim().slice(0, 120),
+      cuentaId: getCuenta(x.cuenta) ? x.cuenta : null, destinoId: getCuenta(x.destino) ? x.destino : null,
+      categoriaId: getCat(x.categoria) ? x.categoria : null,
+      fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha)) ? String(x.fecha) : null,
+      empresa: !!x.empresa, nota: String(x.nota || '').slice(0, 200),
+    };
+    if (!m.categoriaId && m.tipo === 'gasto') m.categoriaId = cats(m.descripcion);
+    m.dup = S.movimientos.some((o) => o.fecha === m.fecha && o.monto === m.monto && o.cuentaId === m.cuentaId && norm(o.descripcion) === norm(m.descripcion));
+    return m;
+  }).filter((m) => m.monto > 0 && m.fecha).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  if (!porAgregar.length) { toast('El archivo no tiene movimientos válidos'); return; }
+  const filas = porAgregar.map((m, i) => `<label class="row">
+      <input type="checkbox" name="sel" value="${i}" ${m.dup ? '' : 'checked'} style="width:22px;height:22px;accent-color:#2f6bff;flex:none">
+      <div class="row-main"><div class="row-title">${esc(m.descripcion || '(sin descripción)')}</div>
+        <div class="row-sub">${fCorta(m.fecha)} · ${esc(nombreCuenta(m.cuentaId) || 'Cuenta por confirmar')} · ${esc(getCat(m.categoriaId)?.nombre || 'Por confirmar')}</div>
+        ${m.dup ? '<div class="tags"><span class="badge badge-warn">Ya lo tienes registrado</span></div>' : ''}</div>
+      <div class="row-end">${m.tipo === 'ingreso' ? '+' : ''}${money(m.monto, m.moneda)}${m.montoCargo != null ? `<small>cargo ${money(m.montoCargo, 'USD')}</small>` : ''}</div></label>`).join('');
+  openSheet(`<form data-form="agregar" class="form" novalidate>${head('Agregar movimientos')}
+    <div class="banner"><div class="b-ico">${ICON.list}</div><div><b>${plural(porAgregar.length, 'movimiento', 'movimientos')} en el archivo</b>${data.nota ? esc(data.nota) : 'Revisa la lista. Desmarca lo que no quieras agregar.'}</div></div>
+    <label class="switch"><input type="checkbox" name="yaEnSaldo" checked><span class="switch-ui"></span><span class="switch-txt"><b>Ya están incluidos en mis saldos actuales</b><small>Déjalo activado si ya cargaste la deuda y los saldos de hoy: así se guardan para tus análisis sin descontarlos dos veces.</small></span></label>
+    <div class="day-group">${filas}</div>
+    <div class="sheet-actions"><button class="btn btn-primary btn-xl" type="submit">Agregar seleccionados</button></div></form>`);
+}
+function guardarAgregar(f) {
+  const sel = $$('input[name=sel]:checked', f).map((el) => porAgregar[Number(el.value)]).filter(Boolean);
+  if (!sel.length) { toast('No marcaste ningún movimiento'); return; }
+  const ya = f.elements.yaEnSaldo.checked;
+  const ts = Date.now();
+  sel.forEach((m, i) => { const { dup, ...x } = m; S.movimientos.push({ ...x, id: uid(), creado: ts + i, demo: false, yaEnSaldo: ya }); });
+  porAgregar = [];
+  save(); closeSheet(true); ui.tab = 'movimientos'; render(); window.scrollTo(0, 0);
+  toast(`${plural(sel.length, 'movimiento agregado', 'movimientos agregados')} ✓`);
 }
 
 /* ---------------- Datos de ejemplo ---------------- */
@@ -1559,7 +1660,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('submit', (e) => {
   e.preventDefault();
   const f = e.target;
-  const h = { mov: guardarMov, cuenta: guardarCuenta, cat: guardarCat, plan: guardarPlan, aporte: guardarAporte, param: guardarParam }[f.dataset.form];
+  const h = { mov: guardarMov, cuenta: guardarCuenta, cat: guardarCat, plan: guardarPlan, aporte: guardarAporte, param: guardarParam, agregar: guardarAgregar }[f.dataset.form];
   if (h) h(f);
 });
 
@@ -1581,8 +1682,20 @@ document.addEventListener('input', (e) => {
 initChrome();
 render();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+// Actualización automática: si hay versión nueva, se instala y la app se recarga sola (nunca con un formulario abierto)
+let swReg = null;
+let recargaPendiente = false;
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  const habiaVersion = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!habiaVersion) return;
+    if ($('#sheet').hidden) location.reload(); else recargaPendiente = true;
+  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').then((r) => { swReg = r; }).catch(() => {}));
 }
-// Si la app queda abierta pasada la medianoche, refresca la fecha
-document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#sheet').hidden) render(); });
+// Al volver a la app: busca actualización y refresca la fecha si pasó la medianoche
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (swReg) swReg.update().catch(() => {});
+  if ($('#sheet').hidden) { if (recargaPendiente) location.reload(); else render(); }
+});

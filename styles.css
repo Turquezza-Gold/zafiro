@@ -219,6 +219,16 @@ svg { display: block; flex: none; }
 .tcard-foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--text-2); display: flex; flex-direction: column; gap: 3px; }
 .tcard-foot b { color: var(--text); font-variant-numeric: tabular-nums; }
 .tcard-empty { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.tcard-linea { border-color: rgba(91, 140, 255, 0.35); }
+.linea-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.linea-item { width: 100%; text-align: left; padding: 12px; border-radius: 14px; background: rgba(4, 8, 20, 0.45); border: 1px solid var(--line-2); }
+.linea-item:active { transform: scale(0.99); }
+.li-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.li-name { font-weight: 650; font-size: 15px; min-width: 0; }
+.li-name small { color: var(--muted); font-weight: 500; letter-spacing: 0.06em; }
+.li-deuda { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.li-sub { color: var(--text-2); font-size: 13px; margin-top: 4px; }
+.li-sub b { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* ---------- Próximos pagos ---------- */
 .pago { display: flex; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); width: 100%; text-align: left; }

@@ -1,6 +1,6 @@
 /* Zafiro · service worker: guarda la app en el iPhone para que abra sin internet.
    Solo guarda los archivos de la app. Tus datos NO pasan por aquí: viven en localStorage. */
-const CACHE = 'zafiro-v3';
+const CACHE = 'zafiro-v4';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -13,7 +13,8 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)));
+  // cache: 'reload' = baja siempre la versión nueva, no una copia vieja del navegador
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS.map((u) => new Request(u, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
