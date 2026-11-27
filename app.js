@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1121,7 +1121,7 @@ function vAjustes() {
   const instalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   return `<h1 class="view-title">Ajustes</h1>
     ${instalada ? '' : `<div class="banner"><div class="b-ico">${ICON.phone}</div><div><b>Instálala en tu iPhone</b>En Safari toca Compartir → «Agregar a inicio». Así abre a pantalla completa, sin internet, y tus datos quedan protegidos.</div></div>`}
-    ${sec(`${ICON.shield} Respaldo`, `<div class="facts" style="margin-top:0"><span>Último respaldo: <b>${d == null ? 'nunca' : d === 0 ? 'hoy' : `hace ${plural(d, 'día', 'días')}`}</b></span></div>
+    ${sec(`${ICON.shield} Respaldo`, `<div class="facts" style="margin-top:0"><span>Datos en esta app: <b>${resumenDatos(S).texto}</b></span><span>Último respaldo: <b>${d == null ? 'nunca' : d === 0 ? 'hoy' : `hace ${plural(d, 'día', 'días')}`}</b></span></div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" data-action="exportar">${ICON.down} Exportar</button><button class="btn" data-action="importar">${ICON.upload} Importar</button></div>
       <div class="card-note">Exportar crea un archivo JSON (para restaurar) y uno CSV (para Excel/Numbers): en el menú elige «Guardar en Archivos» → iCloud Drive. Importar sirve para restaurar un respaldo o para agregar movimientos desde un archivo (te muestra la lista antes de agregar).</div>`, '', 'sec-respaldo')}
     ${sec('Cuentas y tarjetas', `<div class="list">${S.cuentas.map(cuentaRow).join('')}</div><button class="btn btn-block" style="margin-top:10px" data-action="nueva-cuenta">+ Agregar cuenta</button>
@@ -1614,6 +1614,10 @@ function descargar(files) {
 }
 function marcarExport() { S.ajustes.ultimaExportacion = Date.now(); save(); render(); toast('Respaldo listo ✓'); }
 async function exportar() {
+  if (resumenDatos(S).vacio) {
+    alert('Aquí no hay datos para respaldar: no hay saldos, movimientos ni gastos fijos.\n\nSi tus datos están en otro ícono de Zafiro (o en Safari), abre ese y exporta desde ahí.');
+    return;
+  }
   const fecha = hoyISO();
   const data = { app: 'zafiro', version: 1, exportado: new Date().toISOString(), ...S };
   const files = [
@@ -1632,12 +1636,31 @@ function importarArchivo(file) {
     try { data = JSON.parse(rd.result); } catch { toast('Ese archivo no es un respaldo válido'); return; }
     if (data && data.app === 'zafiro-movimientos' && Array.isArray(data.movimientos)) { sheetAgregar(data); return; }
     if (!data || data.app !== 'zafiro' || !Array.isArray(data.cuentas)) { toast('Ese archivo no es un respaldo de Zafiro'); return; }
-    const n = Array.isArray(data.movimientos) ? data.movimientos.length : 0;
-    if (!confirm(`Restaurar respaldo del ${data.exportado ? fMedia(new Date(data.exportado)) : 'archivo'} con ${n} movimientos.\n\nEsto REEMPLAZA los datos actuales de la app. ¿Continuar?`)) return;
+    const r = resumenDatos(data);
+    const cuando = data.exportado ? `${fMedia(new Date(data.exportado))}, ${new Date(data.exportado).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}` : 'sin fecha';
+    if (r.vacio) {
+      alert(`Este respaldo está VACÍO (exportado el ${cuando}).\n\nNo tiene saldos, movimientos ni gastos fijos, así que no lo importé.\n\nSuele pasar cuando se exporta desde Safari o desde un ícono nuevo, y no desde el ícono donde cargaste tus datos. Abre la app donde ves tus datos, exporta de nuevo y vuelve a importar.`);
+      return;
+    }
+    if (!confirm(`Respaldo del ${cuando}:\n• ${r.texto}\n\nEsto REEMPLAZA los datos actuales de esta app. ¿Continuar?`)) return;
     S = normalizar(data);
-    save(); ui.tab = 'inicio'; render(); toast('Respaldo restaurado ✓');
+    save(); ui.tab = 'inicio'; render(); window.scrollTo(0, 0);
+    toast(`Restaurado ✓ ${resumenDatos(S).texto}`);
   };
   rd.readAsText(file);
+}
+
+// Cuántos datos tiene un estado (la app o un respaldo): sirve para ver dónde viven tus datos
+function resumenDatos(d) {
+  const cuentas = (d.cuentas || []).filter((c) => c && c.saldo != null).length;
+  const movs = (d.movimientos || []).filter((m) => m && !m.demo).length;
+  const fijos = (d.fijos || []).filter((f) => f && !f.demo).length;
+  const planes = (d.planes || []).filter((p) => p && !p.demo && p.id !== 'departamento').length;
+  return {
+    cuentas, movs, fijos, planes,
+    vacio: !cuentas && !movs && !fijos && !planes,
+    texto: `${plural(cuentas, 'cuenta con saldo', 'cuentas con saldo')} · ${plural(movs, 'movimiento', 'movimientos')} · ${plural(fijos, 'gasto fijo', 'gastos fijos')}${planes ? ` · ${plural(planes, 'plan', 'planes')}` : ''}`,
+  };
 }
 
 /* ----- Agregar movimientos desde un archivo (ej. armado desde capturas del banco) ----- */
