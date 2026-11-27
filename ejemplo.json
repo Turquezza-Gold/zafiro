@@ -2,55 +2,353 @@
   "app": "zafiro-ejemplo",
   "nota": "DATOS FICTICIOS solo para probar la app. No son datos reales de nadie. Las fechas son relativas a hoy (dias: 0 = hoy, -1 = ayer).",
   "cuentas": {
-    "bcp": { "saldo": 3850.75 },
-    "efectivo": { "saldo": 160 },
-    "bbva-platinum": { "saldo": 1240.3, "limite": 9000, "diaCorte": 20, "diaPago": 15, "ultimos4": "0000" },
-    "cmr": { "saldo": 480, "limite": 4000, "diaCorte": 5, "diaPago": 28 },
-    "ripley": { "saldo": 0, "limite": 2500, "diaCorte": 12, "diaPago": 5 },
-    "diners-titanium": { "saldo": 120, "limite": 3000, "diaCorte": 25, "diaPago": 19 },
-    "diners-sphera": { "saldo": 65.4, "diaCorte": 25, "diaPago": 19 },
-    "pacificard": { "saldo": 60, "limite": 1200, "diaCorte": 10, "diaPago": 5 }
+    "bcp": {
+      "saldo": 3850.75
+    },
+    "efectivo": {
+      "saldo": 160
+    },
+    "bbva-platinum": {
+      "saldo": 1240.3,
+      "limite": 9000,
+      "diaCorte": 20,
+      "diaPago": 15,
+      "ultimos4": "0000"
+    },
+    "cmr": {
+      "saldo": 480,
+      "limite": 4000,
+      "diaCorte": 5,
+      "diaPago": 28
+    },
+    "ripley": {
+      "saldo": 0,
+      "limite": 2500,
+      "diaCorte": 12,
+      "diaPago": 5
+    },
+    "diners-titanium": {
+      "saldo": 120,
+      "limite": 3000,
+      "diaCorte": 25,
+      "diaPago": 19
+    },
+    "diners-sphera": {
+      "saldo": 65.4,
+      "diaCorte": 25,
+      "diaPago": 19
+    },
+    "pacificard": {
+      "saldo": 60,
+      "limite": 1200,
+      "diaCorte": 10,
+      "diaPago": 5
+    }
   },
-  "ajustes": { "tc": 3.8, "ahorroMensual": 800, "presupuesto": 2500, "proyMeses": 12 },
+  "ajustes": {
+    "tc": 3.8,
+    "ahorroMensual": 800,
+    "presupuesto": 2500,
+    "proyMeses": 12
+  },
   "movimientos": [
-    { "dias": 0, "monto": 12, "descripcion": "almuerzo", "cuenta": "yape", "categoria": "comida-fuera" },
-    { "dias": 0, "monto": 9.5, "descripcion": "café", "cuenta": "plin", "categoria": "antojos" },
-    { "dias": -1, "monto": 15, "descripcion": "taxi", "cuenta": "efectivo", "categoria": "transporte" },
-    { "dias": -1, "monto": 6, "descripcion": "galletas", "cuenta": "yape", "categoria": "antojos" },
-    { "dias": -2, "monto": 186.4, "descripcion": "supermercado", "cuenta": "bbva-platinum", "categoria": "super" },
-    { "dias": -2, "monto": 40, "descripcion": "compra varios", "cuenta": null, "categoria": null },
-    { "dias": -2, "monto": 7, "descripcion": "gaseosa", "cuenta": "yape", "categoria": "antojos" },
-    { "dias": -3, "monto": 44.9, "descripcion": "streaming", "cuenta": "bbva-platinum", "categoria": "suscripciones" },
-    { "dias": -3, "monto": 85, "descripcion": "almuerzo con cliente", "cuenta": "bbva-platinum", "categoria": "comida-fuera", "empresa": true },
-    { "dias": -4, "monto": 38, "descripcion": "farmacia", "cuenta": "bcp", "categoria": "salud" },
-    { "dias": -4, "monto": 5.5, "descripcion": "café", "cuenta": "yape", "categoria": "antojos" },
-    { "dias": -5, "monto": 120, "montoCargo": 31.6, "descripcion": "cena", "cuenta": "diners-sphera", "categoria": "comida-fuera" },
-    { "dias": -6, "monto": 259, "descripcion": "zapatillas", "cuenta": "cmr", "categoria": "ropa" },
-    { "dias": -7, "monto": 18, "descripcion": "pasajes", "cuenta": "yape", "categoria": "transporte" },
-    { "dias": -8, "tipo": "pago", "monto": 900, "descripcion": "Pago BBVA", "cuenta": "bcp", "destino": "bbva-platinum" },
-    { "dias": -9, "monto": 22, "descripcion": "delivery", "cuenta": "plin", "categoria": "comida-fuera" },
-    { "dias": -10, "tipo": "ingreso", "monto": 4500, "descripcion": "Sueldo", "cuenta": "bcp" },
-    { "dias": -12, "monto": 89, "descripcion": "internet", "cuenta": "bbva-platinum", "categoria": "telefonia" },
-    { "dias": -14, "monto": 15, "moneda": "USD", "descripcion": "app de música", "cuenta": "pacificard", "categoria": "suscripciones" },
-    { "dias": -18, "monto": 95, "descripcion": "luz y agua", "cuenta": "bcp", "categoria": "vivienda" },
-    { "dias": -22, "monto": 64, "descripcion": "cine y cena", "cuenta": "cmr", "categoria": "entretenimiento" },
-    { "dias": -35, "monto": 210, "descripcion": "supermercado", "cuenta": "bbva-platinum", "categoria": "super" },
-    { "dias": -38, "monto": 95, "descripcion": "luz y agua", "cuenta": "bcp", "categoria": "vivienda" },
-    { "dias": -40, "monto": 89, "descripcion": "internet", "cuenta": "bbva-platinum", "categoria": "telefonia" },
-    { "dias": -45, "monto": 48, "descripcion": "cine", "cuenta": "cmr", "categoria": "entretenimiento" },
-    { "dias": -50, "monto": 120, "descripcion": "regalo cumpleaños", "cuenta": "ripley", "categoria": "regalos" },
-    { "dias": -52, "monto": 300, "descripcion": "reparación", "cuenta": "bcp", "categoria": "hogar" },
-    { "dias": -65, "monto": 240, "descripcion": "supermercado", "cuenta": "bbva-platinum", "categoria": "super" },
-    { "dias": -70, "monto": 180, "descripcion": "polo y jean", "cuenta": "cmr", "categoria": "ropa" },
-    { "dias": -75, "monto": 62, "descripcion": "delivery", "cuenta": "plin", "categoria": "comida-fuera" },
-    { "dias": -95, "monto": 198, "descripcion": "supermercado", "cuenta": "bbva-platinum", "categoria": "super" },
-    { "dias": -100, "monto": 70, "descripcion": "peluquería", "cuenta": "yape", "categoria": "cuidado" },
-    { "dias": -125, "monto": 230, "descripcion": "supermercado", "cuenta": "bbva-platinum", "categoria": "super" },
-    { "dias": -130, "monto": 90, "descripcion": "concierto", "cuenta": "cmr", "categoria": "entretenimiento" },
-    { "dias": -150, "monto": 95, "descripcion": "luz y agua", "cuenta": "bcp", "categoria": "vivienda" }
+    {
+      "dias": 0,
+      "monto": 12,
+      "descripcion": "almuerzo",
+      "cuenta": "yape",
+      "categoria": "comida-fuera"
+    },
+    {
+      "dias": 0,
+      "monto": 9.5,
+      "descripcion": "café",
+      "cuenta": "plin",
+      "categoria": "antojos"
+    },
+    {
+      "dias": -1,
+      "monto": 15,
+      "descripcion": "taxi",
+      "cuenta": "efectivo",
+      "categoria": "transporte"
+    },
+    {
+      "dias": -1,
+      "monto": 6,
+      "descripcion": "galletas",
+      "cuenta": "yape",
+      "categoria": "antojos"
+    },
+    {
+      "dias": -2,
+      "monto": 186.4,
+      "descripcion": "supermercado",
+      "cuenta": "bbva-platinum",
+      "categoria": "super"
+    },
+    {
+      "dias": -2,
+      "monto": 40,
+      "descripcion": "compra varios",
+      "cuenta": null,
+      "categoria": null
+    },
+    {
+      "dias": -2,
+      "monto": 7,
+      "descripcion": "gaseosa",
+      "cuenta": "yape",
+      "categoria": "antojos"
+    },
+    {
+      "dias": -3,
+      "monto": 44.9,
+      "descripcion": "streaming",
+      "cuenta": "bbva-platinum",
+      "categoria": "suscripciones"
+    },
+    {
+      "dias": -3,
+      "monto": 85,
+      "descripcion": "almuerzo con cliente",
+      "cuenta": "bbva-platinum",
+      "categoria": "comida-fuera",
+      "empresa": true
+    },
+    {
+      "dias": -4,
+      "monto": 38,
+      "descripcion": "farmacia",
+      "cuenta": "bcp",
+      "categoria": "salud"
+    },
+    {
+      "dias": -4,
+      "monto": 5.5,
+      "descripcion": "café",
+      "cuenta": "yape",
+      "categoria": "antojos"
+    },
+    {
+      "dias": -5,
+      "monto": 120,
+      "montoCargo": 31.6,
+      "descripcion": "cena",
+      "cuenta": "diners-sphera",
+      "categoria": "comida-fuera"
+    },
+    {
+      "dias": -6,
+      "monto": 259,
+      "descripcion": "zapatillas",
+      "cuenta": "cmr",
+      "categoria": "ropa"
+    },
+    {
+      "dias": -7,
+      "monto": 18,
+      "descripcion": "pasajes",
+      "cuenta": "yape",
+      "categoria": "transporte"
+    },
+    {
+      "dias": -8,
+      "tipo": "pago",
+      "monto": 900,
+      "descripcion": "Pago BBVA",
+      "cuenta": "bcp",
+      "destino": "bbva-platinum"
+    },
+    {
+      "dias": -9,
+      "monto": 22,
+      "descripcion": "delivery",
+      "cuenta": "plin",
+      "categoria": "comida-fuera"
+    },
+    {
+      "dias": -10,
+      "tipo": "ingreso",
+      "monto": 4500,
+      "descripcion": "Sueldo",
+      "cuenta": "bcp"
+    },
+    {
+      "dias": -12,
+      "monto": 89,
+      "descripcion": "internet",
+      "cuenta": "bbva-platinum",
+      "categoria": "telefonia"
+    },
+    {
+      "dias": -14,
+      "monto": 15,
+      "moneda": "USD",
+      "descripcion": "app de música",
+      "cuenta": "pacificard",
+      "categoria": "suscripciones"
+    },
+    {
+      "dias": -18,
+      "monto": 95,
+      "descripcion": "luz y agua",
+      "cuenta": "bcp",
+      "categoria": "vivienda"
+    },
+    {
+      "dias": -22,
+      "monto": 64,
+      "descripcion": "cine y cena",
+      "cuenta": "cmr",
+      "categoria": "entretenimiento"
+    },
+    {
+      "dias": -35,
+      "monto": 210,
+      "descripcion": "supermercado",
+      "cuenta": "bbva-platinum",
+      "categoria": "super"
+    },
+    {
+      "dias": -38,
+      "monto": 95,
+      "descripcion": "luz y agua",
+      "cuenta": "bcp",
+      "categoria": "vivienda"
+    },
+    {
+      "dias": -40,
+      "monto": 89,
+      "descripcion": "internet",
+      "cuenta": "bbva-platinum",
+      "categoria": "telefonia"
+    },
+    {
+      "dias": -45,
+      "monto": 48,
+      "descripcion": "cine",
+      "cuenta": "cmr",
+      "categoria": "entretenimiento"
+    },
+    {
+      "dias": -50,
+      "monto": 120,
+      "descripcion": "regalo cumpleaños",
+      "cuenta": "ripley",
+      "categoria": "regalos"
+    },
+    {
+      "dias": -52,
+      "monto": 300,
+      "descripcion": "reparación",
+      "cuenta": "bcp",
+      "categoria": "hogar"
+    },
+    {
+      "dias": -65,
+      "monto": 240,
+      "descripcion": "supermercado",
+      "cuenta": "bbva-platinum",
+      "categoria": "super"
+    },
+    {
+      "dias": -70,
+      "monto": 180,
+      "descripcion": "polo y jean",
+      "cuenta": "cmr",
+      "categoria": "ropa"
+    },
+    {
+      "dias": -75,
+      "monto": 62,
+      "descripcion": "delivery",
+      "cuenta": "plin",
+      "categoria": "comida-fuera"
+    },
+    {
+      "dias": -95,
+      "monto": 198,
+      "descripcion": "supermercado",
+      "cuenta": "bbva-platinum",
+      "categoria": "super"
+    },
+    {
+      "dias": -100,
+      "monto": 70,
+      "descripcion": "peluquería",
+      "cuenta": "yape",
+      "categoria": "cuidado"
+    },
+    {
+      "dias": -125,
+      "monto": 230,
+      "descripcion": "supermercado",
+      "cuenta": "bbva-platinum",
+      "categoria": "super"
+    },
+    {
+      "dias": -130,
+      "monto": 90,
+      "descripcion": "concierto",
+      "cuenta": "cmr",
+      "categoria": "entretenimiento"
+    },
+    {
+      "dias": -150,
+      "monto": 95,
+      "descripcion": "luz y agua",
+      "cuenta": "bcp",
+      "categoria": "vivienda"
+    }
   ],
   "planes": [
-    { "nombre": "Viaje a Cusco", "motivo": "Vacaciones de mitad de año", "icono": "✈️", "meta": 2500, "modo": "manual", "ahorrado": 600, "mesesObjetivo": 7 },
-    { "nombre": "Fondo de emergencia", "motivo": "3 meses de gastos por si acaso", "icono": "🛡️", "meta": 6000, "modo": "manual", "ahorrado": 1500 }
+    {
+      "nombre": "Viaje a Cusco",
+      "motivo": "Vacaciones de mitad de año",
+      "icono": "✈️",
+      "meta": 2500,
+      "modo": "manual",
+      "ahorrado": 600,
+      "mesesObjetivo": 7
+    },
+    {
+      "nombre": "Fondo de emergencia",
+      "motivo": "3 meses de gastos por si acaso",
+      "icono": "🛡️",
+      "meta": 6000,
+      "modo": "manual",
+      "ahorrado": 1500
+    }
+  ],
+  "fijos": [
+    {
+      "descripcion": "streaming",
+      "monto": 44.9,
+      "cuenta": "bbva-platinum",
+      "categoria": "suscripciones",
+      "dia": 3
+    },
+    {
+      "descripcion": "internet",
+      "monto": 89,
+      "cuenta": "bbva-platinum",
+      "categoria": "telefonia",
+      "dia": 14
+    },
+    {
+      "descripcion": "luz y agua",
+      "monto": 95,
+      "cuenta": "bcp",
+      "categoria": "vivienda",
+      "dia": 9
+    },
+    {
+      "descripcion": "gimnasio",
+      "monto": 120,
+      "cuenta": "cmr",
+      "categoria": "cuidado",
+      "dia": 28
+    }
   ]
 }

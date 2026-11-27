@@ -473,3 +473,8 @@ svg { display: block; flex: none; }
 @media (min-width: 600px) {
   .view { padding-top: 22px; }
 }
+
+/* ---------- Gastos fijos / Siri ---------- */
+.btn-mini { min-height: 34px; padding: 0 12px; font-size: 13.5px; border-radius: 10px; margin-top: 6px; background: var(--blue-soft); border-color: rgba(91, 140, 255, 0.35); color: var(--blue-3); }
+.row-end:has(.btn-mini) { display: flex; flex-direction: column; align-items: flex-end; }
+.code { display: inline-block; margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: #050a16; border: 1px solid var(--line-2); font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; word-break: break-all; }

@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.3.2';
+const APP_VERSION = '1.4.0';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -152,6 +152,13 @@ function cuentaBase(c) {
 function planBase(p) {
   return Object.assign({ id: uid(), nombre: 'Mi plan', motivo: '', icono: '🎯', meta: null, modo: 'manual', ahorrado: 0, fechaObjetivo: null, demo: false }, p);
 }
+// Gasto fijo: algo que pagas cada mes (alquiler, internet, streaming…)
+function fijoBase(f) {
+  const x = Object.assign({ id: uid(), descripcion: '', monto: null, moneda: 'PEN', cuentaId: null, categoriaId: null, dia: 1, activo: true, demo: false }, f);
+  x.dia = Math.min(31, Math.max(1, parseInt(x.dia, 10) || 1));
+  x.moneda = x.moneda === 'USD' ? 'USD' : 'PEN';
+  return x;
+}
 function planDepto() {
   return planBase({ id: 'departamento', nombre: 'Departamento', motivo: 'Cuota inicial de mi depa', icono: '🏠', meta: 15500, modo: 'neto' });
 }
@@ -162,7 +169,8 @@ function estadoInicial() {
     categorias: CATS_BASE.map((c) => ({ ...c })),
     movimientos: [],
     planes: [planDepto()],
-    ajustes: { tc: null, ahorroMensual: null, umbralHormiga: 20, presupuesto: null, ultimaExportacion: null, proyFecha: null },
+    fijos: [],
+    ajustes: { tc: null, ahorroMensual: null, umbralHormiga: 20, presupuesto: null, ultimaExportacion: null, proyFecha: null, abrirEnGasto: false },
     ejemplo: null,
   };
 }
@@ -188,10 +196,11 @@ function normalizar(raw) {
       moneda: m.moneda === 'USD' ? 'USD' : 'PEN', montoCargo: typeof m.montoCargo === 'number' ? m.montoCargo : null,
       descripcion: String(m.descripcion || ''), cuentaId: m.cuentaId || null, destinoId: m.destinoId || null,
       categoriaId: m.categoriaId || null, fecha: String(m.fecha).slice(0, 10), empresa: !!m.empresa,
-      nota: String(m.nota || ''), creado: Number(m.creado) || Date.now(), demo: !!m.demo, yaEnSaldo: !!m.yaEnSaldo,
+      nota: String(m.nota || ''), creado: Number(m.creado) || Date.now(), demo: !!m.demo, yaEnSaldo: !!m.yaEnSaldo, fijoId: m.fijoId || null,
     }));
   }
   if (Array.isArray(raw.planes)) s.planes = raw.planes.map((p) => planBase({ ...p }));
+  if (Array.isArray(raw.fijos)) s.fijos = raw.fijos.filter((f) => f && typeof f === 'object').map((f) => fijoBase({ ...f }));
   s.ajustes = { ...base.ajustes, ...(raw.ajustes || {}) };
   s.ejemplo = raw.ejemplo || null;
   return s;
@@ -414,6 +423,31 @@ function gastoHasta(mk, dia) {
   return t;
 }
 
+/* ----- Gastos fijos ----- */
+const getFijo = (id) => S.fijos.find((f) => f.id === id) || null;
+function pagoDeFijo(f, mk) {
+  const dn = norm(f.descripcion);
+  return S.movimientos.find((m) => m.tipo === 'gasto' && mesKey(m.fecha) === mk &&
+    (m.fijoId === f.id || (!m.fijoId && dn && norm(m.descripcion) === dn && (m.cuentaId || null) === (f.cuentaId || null)))) || null;
+}
+function fijosMes(mk = hoyMk()) {
+  const t = hoyDate();
+  const [y, mo] = mk.split('-').map(Number);
+  const lst = S.fijos.filter((f) => f.activo).map((f) => {
+    const fecha = fechaDia(y, mo - 1, f.dia);
+    const pago = pagoDeFijo(f, mk);
+    return { f, fecha, pago, vencido: !pago && fecha < t, dias: diasEntre(t, fecha) };
+  }).sort((a, b) => a.fecha - b.fecha);
+  const pen = (monto, moneda) => toPEN({ monto: monto || 0, moneda });
+  let total = 0, pagado = 0, pendiente = 0;
+  for (const x of lst) {
+    const v = pen(x.f.monto, x.f.moneda) || 0;
+    total += v;
+    if (x.pago) pagado += toPEN(x.pago) || 0; else pendiente += v;
+  }
+  return { lst, total: round2(total), pagado: round2(pagado), pendiente: round2(pendiente) };
+}
+
 /* ----- Planes ----- */
 function ahorradoPlan(p) {
   if (p.modo === 'neto') { const pt = patrimonio(); return pt.conSaldo ? Math.max(0, pt.neto) : 0; }
@@ -489,6 +523,13 @@ function consejos() {
   const top = [...r.porCat.values()].sort((a, b) => b.total - a.total)[0];
   if (top && r.total > 0) out.push({ tono: 'info', icono: '🔎', texto: `Tu mayor gasto del mes es ${top.nombre}: ${money(top.total)} (${pct(top.total / r.total)} del total).` });
   if (!tc && S.movimientos.some((m) => m.moneda === 'USD') ) out.push({ tono: 'info', icono: '💱', texto: 'Tienes montos en dólares. Ingresa tu tipo de cambio para sumarlos a tus totales.', accion: { label: 'Ingresar tipo de cambio', action: 'sheet-param' } });
+  if (S.fijos.some((f) => f.activo)) {
+    const fm = fijosMes();
+    const venc = fm.lst.filter((x) => x.vencido);
+    const pronto = fm.lst.filter((x) => !x.pago && x.dias >= 0 && x.dias <= 3);
+    if (venc.length) out.push({ tono: 'alerta', icono: '📌', texto: `Tienes ${plural(venc.length, 'gasto fijo vencido', 'gastos fijos vencidos')} sin registrar: ${venc.map((x) => x.f.descripcion).join(', ')}. Si ya los pagaste, regístralos para que tus números cuadren.` });
+    if (pronto.length) out.push({ tono: 'info', icono: '📅', texto: `Pronto vence: ${pronto.map((x) => `${x.f.descripcion} (${fCorta(x.fecha)}, ${money(x.f.monto, x.f.moneda)})`).join(', ')}.` });
+  }
   if (!out.length) out.push({ tono: 'bien', icono: '✨', texto: 'Registra tus gastos unos días y aquí aparecerán consejos basados en tus propios números.' });
   const orden = { alerta: 0, info: 1, bien: 2 };
   return out.sort((a, b) => orden[a.tono] - orden[b.tono]);
@@ -647,6 +688,7 @@ function vInicio() {
     heroHTML(p),
     `<button class="btn btn-primary btn-xl cta-gasto" data-action="nuevo-mov" data-tipo="gasto"><span class="plus">+</span> Gasto <small>${ICON.mic} dicta o escribe</small></button>`,
     onboardingHTML(p),
+    fijosHTML(),
     pagosHTML(p),
     tarjetasHTML(),
     categoriasMesHTML(r),
@@ -654,6 +696,32 @@ function vInicio() {
     proyeccionHTML(p),
     consejosHTML(3),
   ].join('');
+}
+function fijosHTML() {
+  if (!S.fijos.some((f) => f.activo)) {
+    if (!S.movimientos.some((m) => !m.demo)) return '';
+    return `<div class="banner"><div class="b-ico">📌</div><div><b>¿Pagas cosas fijas cada mes?</b>Alquiler, internet, celular, streaming… Agrégalas una vez y cada mes te recuerdo cuáles faltan.<div class="b-actions"><button class="btn btn-white" data-action="nuevo-fijo">+ Agregar gasto fijo</button></div></div></div>`;
+  }
+  const mk = hoyMk();
+  const fm = fijosMes(mk);
+  const filas = fm.lst.map((x) => {
+    const f = x.f;
+    const cu = nombreCuenta(f.cuentaId);
+    let estado;
+    if (x.pago) estado = `<span class="badge badge-ok">Pagado ${fCorta(x.pago.fecha)}</span>`;
+    else if (x.vencido) estado = `<span class="badge badge-bad">Vencido hace ${plural(-x.dias, 'día', 'días')}</span>`;
+    else if (x.dias <= 3) estado = `<span class="badge badge-warn">Vence ${enDias(x.fecha)}</span>`;
+    else estado = `<span class="badge badge-gray">Día ${f.dia}</span>`;
+    return `<div class="row">
+      <div class="row-main"><div class="row-title">${esc(f.descripcion || 'Gasto fijo')}</div><div class="row-sub">${esc(cu || 'Cuenta por confirmar')}</div><div class="tags">${estado}</div></div>
+      <div class="row-end">${money(x.pago ? x.pago.monto : f.monto, x.pago ? x.pago.moneda : f.moneda)}${x.pago ? '' : `<button class="btn btn-mini" data-action="registrar-fijo" data-id="${f.id}">Registrar</button>`}</div></div>`;
+  }).join('');
+  const prog = fm.total ? Math.min(1, fm.pagado / fm.total) : 0;
+  return sec(`📌 Gastos fijos de ${MESES[Number(mk.slice(5, 7)) - 1]}`, `
+    <div class="goal-nums"><span class="big">${money(fm.pendiente)}</span><span class="of">por pagar<br>de ${money(fm.total)} al mes</span></div>
+    <div class="progress"><i style="width:${(prog * 100).toFixed(1)}%"></i></div>
+    <div class="list">${filas}</div>
+    <div class="card-note">Toca «Registrar» cuando lo pagues: revisas el monto y guardas. <button class="link-btn" data-action="tab" data-tab="ajustes" data-scroll="sec-fijos">Administrar</button></div>`);
 }
 function hayDatosReales() { return S.movimientos.some((m) => !m.demo) || (!S.ejemplo && S.cuentas.some((c) => c.saldo != null)); }
 function diasSinExportar() { const u = S.ajustes.ultimaExportacion; return u ? Math.floor((Date.now() - u) / 864e5) : null; }
@@ -1058,6 +1126,12 @@ function vAjustes() {
       <div class="card-note">Exportar crea un archivo JSON (para restaurar) y uno CSV (para Excel/Numbers): en el menú elige «Guardar en Archivos» → iCloud Drive. Importar sirve para restaurar un respaldo o para agregar movimientos desde un archivo (te muestra la lista antes de agregar).</div>`, '', 'sec-respaldo')}
     ${sec('Cuentas y tarjetas', `<div class="list">${S.cuentas.map(cuentaRow).join('')}</div><button class="btn btn-block" style="margin-top:10px" data-action="nueva-cuenta">+ Agregar cuenta</button>
       <div class="card-note">Solo guardamos el nombre y, si quieres, los últimos 4 dígitos. Nunca el número completo.</div>`, '', 'sec-cuentas')}
+    ${sec('📌 Gastos fijos', `${S.fijos.length ? `<div class="list">${S.fijos.map((f) => `<button class="set-row" data-action="edit-fijo" data-id="${f.id}"><div class="row-main"><div class="row-title">${esc(f.descripcion || 'Gasto fijo')}${f.activo ? '' : ' <span class="badge badge-gray">pausado</span>'}</div><div class="row-sub">Día ${f.dia} · ${esc(nombreCuenta(f.cuentaId) || 'Cuenta por confirmar')} · ${esc(getCat(f.categoriaId)?.nombre || 'Por confirmar')}</div></div><div class="row-end">${money(f.monto, f.moneda)}</div><span class="chev">${ICON.chevron}</span></button>`).join('')}</div>
+      <div class="facts"><span>Total al mes: <b>${money(fijosMes().total)}</b></span></div>` : '<div class="card-note" style="margin-top:0">Lo que pagas todos los meses: alquiler, internet, celular, streaming, gimnasio…</div>'}
+      <button class="btn btn-block" style="margin-top:10px" data-action="nuevo-fijo">+ Agregar gasto fijo</button>
+      <div class="card-note">También puedes activar «Repetir cada mes» al registrar un gasto.</div>`, '', 'sec-fijos')}
+    ${sec(`${ICON.mic} Registro rápido y Siri`, `<label class="switch"><input type="checkbox" data-bind-check="abrirEnGasto" ${S.ajustes.abrirEnGasto ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Al abrir, ir directo a «+ Gasto»</b><small>Tocas el ícono y ya puedes dictar.</small></span></label>
+      <button class="btn btn-block" style="margin-top:10px" data-action="pasos-siri">Ver pasos para usar Siri</button>`, '', 'sec-siri')}
     ${sec('Parámetros', `<div class="facts" style="margin-top:0">
         <span>Tipo de cambio: <b>${a.tc ? `S/ ${fmt.format(a.tc)} por US$ 1` : 'sin ingresar'}</b></span>
         <span>Ahorro mensual: <b>${a.ahorroMensual != null ? money(a.ahorroMensual) : 'sin ingresar'}</b></span>
@@ -1118,18 +1192,22 @@ function opcionesCategoria(sel) {
   }
   return h;
 }
-function sheetMov(m, tipoInicial = 'gasto') {
+function sheetMov(m, tipoInicial = 'gasto', preset = null) {
   const edit = !!m;
-  m = m || { tipo: tipoInicial, monto: null, moneda: 'PEN', montoCargo: null, descripcion: '', cuentaId: '', destinoId: '', categoriaId: '', fecha: hoyISO(), empresa: false, nota: '' };
+  m = m || { tipo: tipoInicial, monto: null, moneda: 'PEN', montoCargo: null, descripcion: '', cuentaId: '', destinoId: '', categoriaId: '', fecha: hoyISO(), empresa: false, nota: '', fijoId: '', ...(preset || {}) };
+  const fijo = getFijo(m.fijoId);
   const html = `<form data-form="mov" class="form" autocomplete="off" novalidate ${edit ? '' : 'data-nuevo="1"'}>
     <input type="hidden" name="id" value="${esc(m.id || '')}">
     <input type="hidden" name="tipo" value="${m.tipo}">
+    <input type="hidden" name="fijoId" value="${esc(m.fijoId || '')}">
     <input type="hidden" name="moneda" value="${m.moneda}">
     ${head(edit ? 'Editar movimiento' : 'Nuevo movimiento')}
     <div class="seg">${[['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['pago', 'Pago tarjeta']].map(([k, l]) => `<button type="button" data-action="mov-tipo" data-v="${k}" class="${m.tipo === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    ${edit ? '' : `<div class="dictado"><label for="f-dictado"><span class="mic">${ICON.mic}</span> Dicta o escribe en una línea</label>
+    ${fijo ? `<div class="banner"><div class="b-ico">📌</div><div><b>Gasto fijo: ${esc(fijo.descripcion)}</b>Revisa el monto (si este mes fue distinto, cámbialo) y guarda.</div></div>` : ''}
+    ${edit || fijo ? '' : `<div class="dictado"><label for="f-dictado"><span class="mic">${ICON.mic}</span> Dicta o escribe en una línea</label>
       <input id="f-dictado" name="dictado" type="text" placeholder="Ej: almuerzo 12 soles Yape" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <small>Toca el micrófono 🎙 del teclado y habla. Yo lleno los campos; tú revisas antes de guardar.</small>
+      <button type="button" class="link-btn" data-action="pegar-dictado">📋 Pegar lo que dictaste con Siri</button>
       <div class="sugerencia" id="sugerencia" hidden></div></div>`}
     <div class="monto-box"><span class="monto-cur" id="monto-cur">${sym(m.moneda)}</span>
       <input name="monto" class="monto-input" inputmode="decimal" placeholder="0.00" value="${m.monto ?? ''}" aria-label="Monto">
@@ -1144,6 +1222,7 @@ function sheetMov(m, tipoInicial = 'gasto') {
     <label class="switch" data-show="ensaldo"><input type="checkbox" name="yaEnSaldo" ${m.yaEnSaldo ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Ya está incluido en el saldo que cargaste</b><small>Es anterior al <span id="ensaldo-fecha"></span>, cuando pusiste el saldo de esta cuenta. Se guarda para tus análisis sin descontarlo otra vez.</small></span></label>
     <label class="switch" data-show="empresa"><input type="checkbox" name="empresa" ${m.empresa ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Pagado por la empresa</b><small>Va a una lista aparte y no entra en tu ahorro.</small></span></label>
     <label class="field"><span>Nota (opcional)</span><input name="nota" value="${esc(m.nota)}"></label>
+    ${edit || fijo ? '' : `<label class="switch" data-show="categoria"><input type="checkbox" name="repetir"><span class="switch-ui"></span><span class="switch-txt"><b>Repetir cada mes (gasto fijo)</b><small>Lo guardo como gasto fijo y cada mes te recuerdo registrarlo.</small></span></label>`}
     <div class="sheet-actions"><button type="submit" class="btn btn-primary btn-xl" id="btn-guardar">Guardar</button>
       ${edit ? `<button type="button" class="btn btn-danger" data-action="mov-borrar" data-id="${m.id}">Borrar movimiento</button>` : ''}</div>
   </form>`;
@@ -1230,6 +1309,12 @@ function guardarMov(f) {
   const mc = num(E.montoCargo.value);
   if (mc && !E.montoCargo.closest('[data-show]').hidden) m.montoCargo = round2(mc);
   m.yaEnSaldo = !E.yaEnSaldo.closest('[data-show]').hidden && E.yaEnSaldo.checked;
+  m.fijoId = E.fijoId.value || null;
+  if (tipo === 'gasto' && E.repetir && E.repetir.checked) {
+    const nf = fijoBase({ descripcion: m.descripcion || getCat(m.categoriaId)?.nombre || 'Gasto fijo', monto: m.monto, moneda: m.moneda, cuentaId: m.cuentaId, categoriaId: m.categoriaId, dia: Number(m.fecha.slice(8, 10)) });
+    S.fijos.push(nf);
+    m.fijoId = nf.id;
+  }
   if (tipo === 'pago' && !m.destinoId) { toast('Elige la tarjeta que pagas'); return; }
   const prev = S.movimientos.find((x) => x.id === m.id);
   if (prev) Object.assign(prev, m);
@@ -1428,6 +1513,66 @@ function guardarAporte(f) {
   save(); closeSheet(true); render(); toast('Plan actualizado');
 }
 
+/* ----- Gasto fijo ----- */
+function sheetFijo(f) {
+  const nuevo = !f;
+  f = f || fijoBase({ id: '' });
+  openSheet(`<form data-form="fijo" class="form" novalidate><input type="hidden" name="id" value="${esc(f.id)}">
+    ${head(nuevo ? 'Nuevo gasto fijo' : 'Editar gasto fijo')}
+    <label class="field"><span>¿Qué pagas?</span><input name="descripcion" value="${esc(f.descripcion)}" placeholder="Ej: alquiler, internet, Netflix"></label>
+    <div class="grid2">
+      <label class="field"><span>Monto al mes</span><input name="monto" inputmode="decimal" placeholder="0.00" value="${f.monto ?? ''}"></label>
+      <label class="field"><span>Moneda</span><select name="moneda"><option value="PEN" ${f.moneda === 'PEN' ? 'selected' : ''}>Soles</option><option value="USD" ${f.moneda === 'USD' ? 'selected' : ''}>Dólares</option></select></label>
+    </div>
+    <label class="field"><span>Día del mes en que lo pagas</span><input name="dia" inputmode="numeric" placeholder="1–31" value="${f.dia ?? ''}"><small>Si el mes tiene menos días, uso el último.</small></label>
+    <label class="field"><span>Se paga con</span><select name="cuentaId">${opcionesCuenta(f.cuentaId, 'gasto')}</select></label>
+    <label class="field"><span>Categoría</span><select name="categoriaId">${opcionesCategoria(f.categoriaId)}</select></label>
+    <label class="switch"><input type="checkbox" name="activo" ${f.activo ? 'checked' : ''}><span class="switch-ui"></span><span class="switch-txt"><b>Activo</b><small>Apágalo para pausarlo sin borrarlo.</small></span></label>
+    <div class="sheet-actions"><button class="btn btn-primary btn-xl" type="submit">Guardar</button>${nuevo ? '' : `<button type="button" class="btn btn-danger" data-action="borrar-fijo" data-id="${f.id}">Borrar gasto fijo</button>`}</div></form>`,
+  (root) => { $('form', root).addEventListener('input', () => { sheetDirty = true; }); });
+}
+function guardarFijo(fm) {
+  const E = fm.elements;
+  const descripcion = E.descripcion.value.trim();
+  const monto = num(E.monto.value);
+  const dia = parseInt(E.dia.value, 10);
+  if (!descripcion) { toast('Escribe qué pagas'); return; }
+  if (!monto || monto <= 0) { toast('Escribe el monto'); return; }
+  if (!(dia >= 1 && dia <= 31)) { toast('El día debe estar entre 1 y 31'); return; }
+  const datos = { descripcion, monto: round2(monto), moneda: E.moneda.value, dia, cuentaId: E.cuentaId.value || null, categoriaId: E.categoriaId.value || null, activo: E.activo.checked };
+  const f = getFijo(E.id.value);
+  if (f) Object.assign(f, datos); else S.fijos.push(fijoBase(datos));
+  save(); closeSheet(true); render(); toast('Gasto fijo guardado');
+}
+
+/* ----- Siri ----- */
+function urlApp() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
+function sheetSiri() {
+  const base = urlApp().replace(/^https?:\/\//, '');
+  const paso = (n, t) => `<div class="row"><div class="ico">${n}</div><div class="row-main" style="white-space:normal"><div class="row-sub" style="white-space:normal;color:var(--text)">${t}</div></div></div>`;
+  openSheet(`<div class="form">${head('Registrar gastos con Siri')}
+    <div class="banner"><div class="b-ico">${ICON.mic}</div><div><b>Así funciona</b>Dices «Oye Siri, Gasto», dictas «almuerzo 12 soles Yape» y Zafiro se abre con todo lleno. Tú revisas y guardas.</div></div>
+    <div class="form-section">Crear el atajo (una sola vez)</div>
+    <div class="list">
+      ${paso(1, 'Abre la app <b>Atajos</b> y toca <b>+</b>.')}
+      ${paso(2, 'Agrega la acción <b>Dictar texto</b> (idioma: Español).')}
+      ${paso(3, 'Agrega <b>Codificar URL</b> (usa el texto dictado).')}
+      ${paso(4, `Agrega <b>URL</b> y escribe:<br><code class="code">webapp://${esc(base)}?gasto=</code> y al final inserta la variable <b>Texto codificado</b>.`)}
+      ${paso(5, 'Agrega <b>Abrir URLs</b>.')}
+      ${paso(6, 'Ponle de nombre <b>Gasto</b>. Listo: di «Oye Siri, Gasto».')}
+    </div>
+    <button type="button" class="btn btn-block" data-action="copiar-texto" data-texto="webapp://${esc(base)}?gasto=">📋 Copiar la dirección del paso 4</button>
+    <div class="form-section">Si se abre Safari en vez de Zafiro</div>
+    <div class="card-note" style="margin-top:0">Apple no garantiza que un atajo abra apps web. Si te pasa, usa este plan B (también es rápido):</div>
+    <div class="list">
+      ${paso('B1', 'En el atajo, cambia los pasos 3, 4 y 5 por <b>Copiar al portapapeles</b>.')}
+      ${paso('B2', 'Activa arriba en Ajustes <b>«Al abrir, ir directo a + Gasto»</b>.')}
+      ${paso('B3', 'Di «Oye Siri, Gasto», dicta, abre Zafiro y toca <b>📋 Pegar lo que dictaste</b>.')}
+    </div>
+    <div class="card-note">Si un atajo abre Safari, Zafiro no guarda nada ahí: te avisa y te deja copiar el texto, porque tus datos viven en la app instalada.</div>
+  </div>`);
+}
+
 /* ----- Parámetros ----- */
 function sheetParam() {
   const a = S.ajustes;
@@ -1562,6 +1707,7 @@ async function cargarEjemplo() {
       fecha: iso(addDays(t, x.dias || 0)), empresa: !!x.empresa, nota: '', creado: ts - 1000, demo: true,
     });
   }
+  for (const f of ej.fijos || []) S.fijos.push(fijoBase({ ...f, cuentaId: f.cuenta || null, categoriaId: f.categoria || null, demo: true }));
   for (const p of ej.planes || []) {
     S.planes.push(planBase({ ...p, id: uid(), demo: true, fechaObjetivo: p.mesesObjetivo ? iso(new Date(t.getFullYear(), t.getMonth() + p.mesesObjetivo, 1)) : null }));
   }
@@ -1573,6 +1719,7 @@ function borrarEjemplo() {
   const snap = S.ejemplo;
   S.movimientos = S.movimientos.filter((m) => !m.demo);
   S.planes = S.planes.filter((p) => !p.demo);
+  S.fijos = S.fijos.filter((f) => !f.demo);
   for (const c of S.cuentas) { const o = snap.cuentas.find((x) => x.id === c.id); if (o) Object.assign(c, o); }
   Object.assign(S.ajustes, snap.ajustes);
   S.ejemplo = null;
@@ -1634,6 +1781,28 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'nuevo-plan': sheetPlan(null); break;
+    case 'nuevo-fijo': sheetFijo(null); break;
+    case 'edit-fijo': sheetFijo(getFijo(id)); break;
+    case 'borrar-fijo': if (confirm('¿Borrar este gasto fijo? Los gastos ya registrados se mantienen.')) { S.fijos = S.fijos.filter((f) => f.id !== id); save(); closeSheet(true); render(); toast('Gasto fijo borrado'); } break;
+    case 'registrar-fijo': {
+      const f = getFijo(id);
+      if (!f) break;
+      const t = hoyDate();
+      const fd = fechaDia(t.getFullYear(), t.getMonth(), f.dia);
+      sheetMov(null, 'gasto', { monto: f.monto, moneda: f.moneda, descripcion: f.descripcion, cuentaId: f.cuentaId || '', categoriaId: f.categoriaId || '', fecha: iso(fd <= t ? fd : t), fijoId: f.id });
+      break;
+    }
+    case 'pasos-siri': sheetSiri(); break;
+    case 'copiar-texto': navigator.clipboard?.writeText(el.dataset.texto || '').then(() => toast('Copiado ✓')).catch(() => toast('No se pudo copiar')); break;
+    case 'pegar-dictado': {
+      const f = el.closest('form');
+      if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Mantén presionado el campo y elige «Pegar»'); break; }
+      navigator.clipboard.readText().then((txt) => {
+        if (!txt || !txt.trim()) { toast('No hay texto copiado'); return; }
+        f.elements.dictado.value = txt.trim(); sheetDirty = true; aplicarDictado(f); syncMovForm(f);
+      }).catch(() => toast('Mantén presionado el campo y elige «Pegar»'));
+      break;
+    }
     case 'edit-plan': sheetPlan(getPlan(id)); break;
     case 'plan-icono': { const f = el.closest('form'); f.elements.icono.value = el.dataset.v; $$('.choice', f).forEach((b) => b.classList.toggle('on', b === el)); break; }
     case 'borrar-plan': if (confirm('¿Borrar este plan?')) { S.planes = S.planes.filter((p) => p.id !== id); save(); closeSheet(true); render(); } break;
@@ -1661,7 +1830,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('submit', (e) => {
   e.preventDefault();
   const f = e.target;
-  const h = { mov: guardarMov, cuenta: guardarCuenta, cat: guardarCat, plan: guardarPlan, aporte: guardarAporte, param: guardarParam, agregar: guardarAgregar }[f.dataset.form];
+  const h = { mov: guardarMov, cuenta: guardarCuenta, cat: guardarCat, plan: guardarPlan, aporte: guardarAporte, param: guardarParam, agregar: guardarAgregar, fijo: guardarFijo }[f.dataset.form];
   if (h) h(f);
 });
 
@@ -1672,6 +1841,7 @@ document.addEventListener('change', (e) => {
     S.ajustes[k] = k === 'proyFecha' ? el.value || null : num(el.value);
     save(); render();
   }
+  if (el.dataset && el.dataset.bindCheck) { S.ajustes[el.dataset.bindCheck] = el.checked; save(); toast(el.checked ? 'Activado' : 'Desactivado'); }
   if (el.id === 'file-import' && el.files && el.files[0]) { importarArchivo(el.files[0]); el.value = ''; }
 });
 
@@ -1682,6 +1852,28 @@ document.addEventListener('input', (e) => {
 /* ---------------- Inicio ---------------- */
 initChrome();
 render();
+// Entrada rápida: ?gasto=texto (atajo de Siri) o «ir directo a + Gasto»
+(function entradaRapida() {
+  const q = new URLSearchParams(location.search);
+  const texto = q.get('gasto');
+  const pidio = texto != null || q.has('nuevo');
+  if (pidio) history.replaceState(null, '', location.pathname);
+  const instalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const tieneDatos = S.movimientos.length > 0 || S.cuentas.some((c) => c.saldo != null);
+  setTimeout(() => {
+    if (pidio && !instalada && !tieneDatos) {
+      // Se abrió en Safari, no en la app: aquí no hay datos. No guardamos nada en el lugar equivocado.
+      openSheet(`<div class="form">${head('Se abrió en Safari')}
+        <div class="banner banner-warn"><div class="b-ico">${ICON.alert}</div><div><b>Tus datos están en la app Zafiro, no aquí</b>Copia lo que dictaste, abre Zafiro desde su ícono y toca «📋 Pegar lo que dictaste».</div></div>
+        ${texto ? `<div class="dictado"><b>${esc(texto)}</b></div><button class="btn btn-primary btn-xl" data-action="copiar-texto" data-texto="${esc(texto)}">📋 Copiar texto</button>` : ''}</div>`);
+      return;
+    }
+    if (pidio || S.ajustes.abrirEnGasto) {
+      sheetMov(null, 'gasto');
+      if (texto) { const f = $('form[data-form=mov]'); if (f && f.elements.dictado) { f.elements.dictado.value = texto; sheetDirty = true; aplicarDictado(f); syncMovForm(f); } }
+    }
+  }, 900);
+})();
 // Logo de bienvenida: se ve ~1.6 s al abrir (o hasta que lo toques)
 (function splash() {
   const el = $('#splash');
