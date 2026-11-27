@@ -1,6 +1,6 @@
 /* Zafiro · service worker: guarda la app en el iPhone para que abra sin internet.
    Solo guarda los archivos de la app. Tus datos NO pasan por aquí: viven en localStorage. */
-const CACHE = 'zafiro-v4';
+const CACHE = 'zafiro-v5';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ARCHIVOS = [
   './icon-180.png',
   './icon-512.png',
   './ejemplo.json',
+  './splash.jpg',
 ];
 
 self.addEventListener('install', (e) => {

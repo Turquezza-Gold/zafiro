@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1681,6 +1681,14 @@ document.addEventListener('input', (e) => {
 /* ---------------- Inicio ---------------- */
 initChrome();
 render();
+// Logo de bienvenida: se ve ~1.6 s al abrir (o hasta que lo toques)
+(function splash() {
+  const el = $('#splash');
+  if (!el) return;
+  const quitar = () => { el.classList.add('fuera'); setTimeout(() => el.remove(), 600); };
+  el.addEventListener('click', quitar, { once: true });
+  setTimeout(quitar, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 600 : 1600);
+})();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 // Actualización automática: si hay versión nueva, se instala y la app se recarga sola (nunca con un formulario abierto)
 let swReg = null;

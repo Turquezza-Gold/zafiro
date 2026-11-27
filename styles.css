@@ -450,6 +450,22 @@ svg { display: block; flex: none; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ---------- Pantalla de bienvenida (logo) ---------- */
+.splash {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  background: radial-gradient(120% 80% at 50% 50%, #020b30 0%, #01061f 60%, #00041a 100%);
+  transition: opacity 0.55s ease, visibility 0.55s;
+}
+.splash img {
+  width: min(100vw, 560px); height: auto; max-height: 100vh;
+  -webkit-mask-image: radial-gradient(closest-side, #000 72%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 72%, transparent 100%);
+  animation: splash-in 0.7s ease both;
+}
+.splash.fuera { opacity: 0; visibility: hidden; }
+@keyframes splash-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
