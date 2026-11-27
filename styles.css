@@ -61,7 +61,7 @@ svg { display: block; flex: none; }
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 11px; }
-.brand-mark { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 0 0 1px var(--line-2), 0 6px 18px rgba(47, 107, 255, 0.35); }
+.brand-mark { width: 40px; height: 40px; border-radius: 11px; box-shadow: 0 0 0 1px rgba(91, 140, 255, 0.3), 0 6px 20px rgba(47, 107, 255, 0.45); }
 .brand-name { font-size: 19px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: linear-gradient(90deg, #fff, var(--blue-3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .brand-sub { font-size: 12.5px; color: var(--text-2); }
 .icon-btn {
@@ -397,6 +397,7 @@ svg { display: block; flex: none; }
 .privacy { font-size: 13.5px; color: var(--text-2); }
 .privacy li { margin: 4px 0; }
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 0; }
+.foot-logo { display: block; width: min(78%, 300px); height: auto; margin: 6px auto 2px; -webkit-mask-image: radial-gradient(closest-side, #000 70%, transparent 100%); mask-image: radial-gradient(closest-side, #000 70%, transparent 100%); }
 
 /* ---------- Barra inferior ---------- */
 .tabbar {

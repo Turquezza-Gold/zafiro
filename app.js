@@ -6,7 +6,7 @@
    ========================================================== */
 
 const KEY = 'zafiro.v1';
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1070,7 +1070,8 @@ function vAjustes() {
       <div class="btn-row" style="margin-top:12px"><button class="btn" data-action="cargar-ejemplo" ${S.ejemplo ? 'disabled' : ''}>Cargar ejemplo</button><button class="btn btn-danger" data-action="borrar-ejemplo" ${S.ejemplo ? '' : 'disabled'}>Borrar ejemplo</button></div>`)}
     ${sec('Privacidad', `<ul class="privacy"><li>Tus datos se guardan solo en este iPhone.</li><li>No hay cuentas, login ni servidor. La app no puede enviar datos a ningún sitio.</li><li>Si borras Safari/la app sin exportar, pierdes los datos: exporta cada semana.</li></ul>
       <button class="btn btn-danger btn-block" style="margin-top:8px" data-action="borrar-todo">Borrar todos mis datos</button>`)}
-    <div class="foot">Zafiro ${APP_VERSION} · Finanzas privadas</div>`;
+    <img class="foot-logo" src="splash.jpg" alt="Zafiro · El valor de tener el control" loading="lazy">
+    <div class="foot">Versión ${APP_VERSION} · Finanzas privadas</div>`;
 }
 
 const VIEWS = { inicio: vInicio, movimientos: vMovimientos, analisis: vAnalisis, planes: vPlanes, ajustes: vAjustes };
