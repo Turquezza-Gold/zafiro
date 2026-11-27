@@ -1,0 +1,5 @@
+.DS_Store
+# Nunca subir respaldos con datos reales
+zafiro-respaldo-*.json
+zafiro-movimientos-*.csv
+*.respaldo.json

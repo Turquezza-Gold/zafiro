@@ -1,0 +1,17 @@
+{
+  "name": "Zafiro · Finanzas privadas",
+  "short_name": "Zafiro",
+  "description": "Tus gastos, tarjetas y ahorro. Privado: los datos viven solo en tu iPhone.",
+  "lang": "es-PE",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#04060B",
+  "theme_color": "#04060B",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

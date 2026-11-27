@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es-PE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Privacidad: la app no puede conectarse a ningún otro sitio. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#04060B">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zafiro">
+  <meta name="format-detection" content="telephone=no">
+  <title>Zafiro · Finanzas privadas</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" href="icon-180.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img src="icon-180.png" alt="" class="brand-mark" width="36" height="36">
+      <div>
+        <div class="brand-name">Zafiro</div>
+        <div class="brand-sub" id="fecha-hoy"></div>
+      </div>
+    </div>
+    <button class="icon-btn" data-action="tab" data-tab="ajustes" aria-label="Ajustes y respaldo" id="btn-ajustes"></button>
+  </header>
+
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button data-action="tab" data-tab="inicio" class="tab" id="tab-inicio"></button>
+    <button data-action="tab" data-tab="movimientos" class="tab" id="tab-movimientos"></button>
+    <button data-action="nuevo-mov" data-tipo="gasto" class="tab tab-add" aria-label="Registrar gasto" id="tab-add"></button>
+    <button data-action="tab" data-tab="analisis" class="tab" id="tab-analisis"></button>
+    <button data-action="tab" data-tab="planes" class="tab" id="tab-planes"></button>
+  </nav>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-action="close-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+
+  <input type="file" id="file-import" accept="application/json,.json" hidden>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p style="padding:24px">Zafiro necesita JavaScript activado.</p></noscript>
+  <script src="app.js" defer></script>
+</body>
+</html>
